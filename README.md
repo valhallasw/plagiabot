@@ -31,3 +31,13 @@ Repository for Turntin-based plagiarism detection for Wikipedia. See https://en.
 
 Useful links:
  * http://www.ithenticate.com/hs-fs/hub/92785/file-1383985272-pdf/iTh_documentation/iThenticate_API_Manual.pdf
+
+
+
+Reporting braindump notes:
+----------------------------
+1. get diffs from the last day or so [on wikiproject medicine]
+2. run on each diff (somehow....) which added at least N words,  N~7
+3. make a daily report: a table, with columns 'plagiarism percentage', 'link to diff', 'link to details subpage'
+4. make details subpage (use e.g. diffid as name) with plagiarism percentage, link to diff and list of pages that was plagiarized from. Also link to the ithenticate details page maybe.
+
