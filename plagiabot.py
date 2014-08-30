@@ -32,31 +32,38 @@ import re
 import dbsettings
 import uuid
 import xmlrpclib
+import requests
 from plagiabot_config import ithenticate_user, ithenticate_password
+import urllib
 
 MIN_SIZE = 500  # minimum length of added text for sending to server
-MIN_PARCENTAGE = 50
+MIN_PERCENTAGE = 50
 
 messages = {
     'en': {
         'table-title': 'Title',
         'table-editor': 'Editor',
         'table-diff': 'Diff',
+        'table-status': 'Status',
         'template-diff': u'Diff',
         'table-source': 'Source',
         'update-summary': 'Update',
-        'ignore_summary': 'Reverted edits by%%'
+        'ignore_summary': '\[*(Reverted|Undid revision)'
     },
     'he': {
         'table-title': u'כותרת',
         'table-editor': u'עורך/עורכת',
         'table-diff': u'הבדל',
+        'table-status': u'מצב',
         'template-diff': u'הבדל',
         'table-source': u'מקורות',
         'update-summary': u'עדכון',
-        'ignore_summary': u'שוחזר מעריכות של%%'
+        'ignore_summary': u'(שוחזר מעריכות של|ביטול גרסה|שחזור עריכות)'
     }
 }
+
+ignore_sites = ['.wikipedia.org', 'he-free.info',
+                'lrd.yahooapis.com']  # TODO: fill it automatically from some source of blacklist/mirrors and forks
 
 
 class PlagiaBot:
@@ -92,8 +99,7 @@ class PlagiaBot:
         else:
             pywikibot.output("\tFound")
 
-
-    def upload_diff(self, plagiatext, title, diffId):
+    def upload_diff(self, plagiatext, title, diff_id):
         if self.server is None:
             self._init_server()
         pywikibot.output("Upload text to server...")
@@ -109,11 +115,11 @@ class PlagiaBot:
             'uploads': [{'title': '%s - %i' % (title, uuid.uuid4()),
                          'author_first': 'Random',
                          'author_last': 'Author',
-                         'filename': diffId,
+                         'filename': diff_id,
                          'upload': xmlrpclib.Binary(plagiatext)}]
         })
         if submit_response['status'] != 200:
-            pywikibot.output(submit_reponse)
+            pywikibot.output(submit_response)
             raise Exception("Invalid status from server")
         try:
             upload = submit_response['uploaded'][0]
@@ -122,8 +128,8 @@ class PlagiaBot:
             print(submit_response)
             raise
 
-    def poll_response(self, upload_id):
-        global MIN_PARCENTAGE
+    def poll_response(self, upload_id, article_title):
+        global MIN_PERCENTAGE
         pywikibot.output("Polling iThenticate until document has been processed...", newline=False)
 
         while True:
@@ -149,11 +155,41 @@ class PlagiaBot:
             pywikibot.output("Sources found were:")
             report = []
             sources = [cp_source for cp_source in report_sources_response['sources'] if
-                       '.wikipedia.org' not in cp_source['linkurl']]
-            for source in sources[:2]:
-                if int(source['percent']) > MIN_PARCENTAGE:
-                    report.append("* %s % 3i%% %i words at %s" % (
-                        source['collection'][0], source['percent'], source['word_count'], source['linkurl']))
+                       'linkurl' in cp_source and not any([True for ig in ignore_sites if ig in cp_source['linkurl']])]
+            num_sources = 0
+            for source in sources:
+                if int(source['percent']) > MIN_PERCENTAGE:
+                    hint_text = ''
+                    try:
+                        req_source = requests.get(source['linkurl'])
+                        if req_source.status_code == 200:
+                            title_encode = urllib.quote(article_title)
+                            mirror_re = re.compile('wikipedia.org/wiki/(%s|%s)' % (
+                                re.sub('[ _]', '[ _]', re.escape(article_title)), title_encode))
+                            if any(mirror_re.findall(req_source.text)):
+                                hint_text = '<span class="success">Mirror?</span>'
+                            elif any(
+                                    re.findall('Licensed under the <a href="http://creativecommons.org/licenses/by-sa/',
+                                               req_source.text)):
+                                hint_text = '<span class="success">(CC-BY-SA)</span>'
+                            elif any(re.findall('domain is for sale|buy this domain', req_source.text, re.I)) or \
+                                    (re.search('<html>', req_source.text, re.I) and
+                                        len(re.findall('<a [^>]*>', req_source.text, re.I)) < 5):
+                                hint_text = '<span class="error">Low quality site</span>'
+                                # continue  #  low quality sites
+                        elif req_source.status_code == 404:
+                            continue  # low quality source - ignore
+                        num_sources += 1
+                    except requests.exceptions.ConnectionError:
+                        hint_text = '<span class="error">connection error</span>'
+                        continue  # we trust it enough by now to just skip those results
+                    except:
+                        num_sources += 1
+                        pass
+                    report.append("* %s % 3i%% %i words at %s %s" % (
+                        source['collection'][0], source['percent'], source['word_count'], source['linkurl'], hint_text))
+                    if num_sources == 3:
+                        break
             report = '\n'.join(report)
             return report
 
@@ -162,16 +198,14 @@ class PlagiaBot:
         if self.report_page is None:
             orig_report = [""]
         else:
-            orig_report = self.report_page.get()
-            orig_report = orig_report.split('==', 1)
+            try:
+                orig_report = self.report_page.get()
+                orig_report = orig_report.split('==', 1)
+            except:
+                orig_report = [""]
         local_messages = messages[self.site.lang] if self.site.lang in messages else messages['en']
-        reports = u"""
-== ~~~~~ ==
-{| class="wikitable sortable"
-! %s !! %s !! %s !! %s
-""" % (local_messages['table-title'], local_messages['table-diff'], local_messages['table-editor'],
-       local_messages['table-source'])
         uploads = []
+        ignore_regex = re.compile(local_messages['ignore_summary'], re.I)
         for p, new_rev, prev_rev in self.generator:
             pywikibot.output('Title: %s' % p.title())
             pywikibot.output('\tPrev: %i\tNew:%i' % (prev_rev, new_rev))
@@ -182,6 +216,11 @@ class PlagiaBot:
                 old = "" if prev_rev == 0 else p.getOldVersion(prev_rev).splitlines(1)
                 new = p.getOldVersion(new_rev).splitlines(1)
                 editor = p._revisions[new_rev].user  # TODO: is there a non private access to user in revisions?
+                comment = p._revisions[new_rev].comment
+                diff_date = p._revisions[new_rev].timestamp
+                # skip edits with specific comments
+                if ignore_regex.match(comment):
+                    continue
             except:
                 pywikibot.output("Error occurred - skipping")
                 continue
@@ -190,60 +229,77 @@ class PlagiaBot:
             diffy.set_seqs(old, new)
             diff = [''.join(new[after_start:after_end]) for opcode, before_start, before_end, after_start, after_end in
                     diffy.get_opcodes() if opcode in ['insert', 'replace']]
-            # other option:
-            # diff = ''.join(difflib.unified_diff(old, new))
-            # diff = [line[1:] for line in diff.splitlines() if re.match('\+[^\+]', line)]
 
             # clean some html/wikitext from the text before sending to server...
             # you may use mwparserfromhell to get cleaner text (but this requires dependency...)
             added_lines = pywikibot.removeHTMLParts(u'\n'.join(diff), keeptags=[])
             added_lines = re.sub("\[\[[^\[\]]+\|([^\[\]]+)\]\]", "\\1", added_lines)  # [[link|textlink]]
             added_lines = re.sub("\[\[(.+?)\]\]", "\\1", added_lines)  # [[links]]
-            added_lines = re.sub("\{\{.*?\}\}", "", added_lines)  # templates
+            added_lines = re.sub("\w+\s+=\s+(\".+\"|[^\"].+? )", "",
+                                 added_lines)  # common in wikitables (align|class|style) etc
+
+            orig = added_lines
+            same = False
+            while not same:
+                added_lines = re.sub("\{\{[^\}]*?\}\}", "", added_lines)  # templates
+                same = added_lines == orig
+                orig = added_lines
             added_lines = re.sub("\[https?:.*?\]", "", added_lines)  # external links
             if len(added_lines) > MIN_SIZE:
                 pywikibot.output('Uploading to server')
                 pywikibot.output('-------------------')
                 try:
                     upload_id = self.upload_diff(added_lines.encode('utf8'), p.title(), "/%i" % new_rev)
-                    uploads.append((p.title(), editor, new_rev, prev_rev, upload_id))
+                    uploads.append(({
+                                        u'title': p.title(),
+                                        u'user': editor,
+                                        u'new': new_rev,
+                                        u'old': prev_rev,
+                                        u'diff_date': diff_date}, upload_id))
                 except:
                     print('Skipping - due to error')
                     continue
             else:
                 pywikibot.output('Change is too small - skipping')
-                # pywikibot.output(added_lines)
-                #pywikibot.output('^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^')
 
         pywikibot.output('Polling uploads')
-        for title, editor, new_rev, prev_rev, upload_id in uploads:
-            report = self.poll_response(upload_id)
-            if len(report) > 0:
-                reports += """
+        reports_source = [{'source': self.poll_response(upload_id, rev_details['title']),
+                           'diffTemplate': local_messages['template-diff']} for rev_details, upload_id in uploads]
+
+        report_template = u"""
 |- valign="top"
-| [[%s]] 
-| {{%s|%s|%i|%i}}
-| [[User:%s|]]
+| [[{title}]]
+| {diff_date} ({{{{{diffTemplate}|{title}|{new}|{old}}}}})
+| [[User:{user}|]] ([[User talk:{user}|{{{{subst:MediaWiki:Talk}}}}]])
 |
-%s""" % (title, local_messages['template-diff'], title, new_rev, prev_rev, editor, report)
-                # break
+{source}
+|"""
+        reports_details = [dict(details[0].items() + source.items()) for details, source in zip(uploads, reports_source)
+                           if len(source['source']) > 0]
+        reports_details = [report_template.format(**rep) for rep in reports_details]
+
+        if len(reports_details) > 0:
+            reports = u"""== ~~~~~ ==
+{| class="wikitable sortable" style="width: 80%%;margin:auto;"
+! width="15%%" | %s !! width="10%%" | %s !! width="10%%" | %s !! %s !! %s
+%s
+|}
+""" % (local_messages['table-title'], local_messages['table-diff'], local_messages['table-editor'],
+       local_messages['table-source'], local_messages['table-status'], ''.join(reports_details))
+
+            if len(orig_report) == 2:
+                reports = orig_report[0] + reports + "\n==" + orig_report[1]
             else:
-                pywikibot.output('skip')
-        reports += "\n|}"
-        if len(orig_report) == 2:
-            reports = orig_report[0] + reports + "\n==" + orig_report[1]
-        else:
-            reports = orig_report[0] + reports
-        if len(uploads) > 0:
-            if self.report_page is None:
-                pywikibot.output(reports)
-            else:
+                reports = orig_report[0] + reports
+
+            pywikibot.output(reports)
+            if self.report_page is not None:
                 self.report_page.put(reports, "Update")
         else:
             pywikibot.output('No violation found!')
 
 
-def db_changes_generator(site, talkTemplate=None, days=0.25):
+def db_changes_generator(site, talk_template=None, days=0.125):
     """
     Generator for changes in specific wikiproject
     """
@@ -251,9 +307,9 @@ def db_changes_generator(site, talkTemplate=None, days=0.25):
     conn = MySQLdb.connect(host=dbsettings.host % site.dbName(),
                            db=dbsettings.dbname % site.dbName(),
                            read_default_file=dbsettings.connect_file)
-    dateLimit = (datetime.datetime.now() - datetime.timedelta(days=days)).strftime('%Y%m%d%H%M%S')
+    date_limit = (datetime.datetime.now() - datetime.timedelta(days=days)).strftime('%Y%m%d%H%M%S')
     cursor = conn.cursor()
-    if talkTemplate is None:
+    if talk_template is None:
         talk_sql = ""
     else:
         talk_sql = """
@@ -273,10 +329,9 @@ def db_changes_generator(site, talkTemplate=None, days=0.25):
                 talkpagemed 
         on 
                 rc_title=talk_title
-""" % talkTemplate
+""" % talk_template
     ignore_summary = messages[site.lang]['ignore_summary'] if site.lang in messages else ''
-
-    cursor.execute('''/* copyright */
+    print('''/* copyright */
 select rc_this_oldid, rc_last_oldid, rc_title, rc_new_len-rc_old_len as diffSize
 from
     recentchanges
@@ -291,9 +346,27 @@ from
         rc_namespace=0 and
         rc_timestamp > %s and
         rc_new_len-rc_old_len>500 and
-        rc_comment not like '%s'
+        rc_comment not rlike '%s'
     order by  rc_new_len-rc_old_len desc
-''' % (talk_sql, dateLimit, ignore_summary))
+''' % (talk_sql, date_limit, ignore_summary))
+    cursor.execute('''/* copyright */
+select rc_this_oldid, rc_last_oldid, rc_title, rc_new_len-rc_old_len as diffSize
+from
+    recentchanges
+%s
+    left join
+        user_groups
+    on
+        rc_user=ug_user and
+        rc_type < 5 and
+        ug_group = 'bot'
+    where ug_group is NULL and
+        rc_namespace=0 and
+        rc_timestamp > %s and
+        rc_new_len-rc_old_len>500/* and
+        rc_comment not like '%%rollback%%'*/
+    order by  rc_new_len-rc_old_len desc
+''' % (talk_sql, date_limit))
     changes = []
     for curid, prev_id, title, diffSize in cursor.fetchall():
         changes.append((pywikibot.Page(site, title.decode('utf-8')), curid, prev_id))
@@ -313,13 +386,13 @@ def main(*args):
     for arg in pywikibot.handleArgs(*args):
         site = pywikibot.getSite()
         if arg.startswith('-talkTemplate:'):
-            generator = db_changes_generator(site, talkTemplate=arg[len("-talkTemplate:"):])
+            generator = db_changes_generator(site, talk_template=arg[len("-talkTemplate:"):])
         elif arg.startswith('-recentchanges:'):
             generator = db_changes_generator(site, days=float(arg[len("-recentchanges:"):]))
-        elif arg.startswith('-api_recentcahnges:'):
+        elif arg.startswith('-api_recentchanges:'):
             source = RecentChangesPageGenerator(namespaces=[0], showBot=False,
-                                                   total=int(arg[len("-api_recentchanges:"):]), changetype=['edit'],
-                                                   showRedirects=False)
+                                                total=int(arg[len("-api_recentchanges:"):]), changetype=['edit'],
+                                                showRedirects=False)
             generator = [(p, p.latestRevision(), p.previousRevision()) for p in source]
         elif arg.startswith('-report:'):
             report_page = arg[len("-report:"):]
@@ -336,5 +409,6 @@ if __name__ == "__main__":
         main()
     except:
         import traceback
+
         traceback.print_exc()
         pywikibot.stopme()
