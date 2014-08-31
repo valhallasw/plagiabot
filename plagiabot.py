@@ -62,9 +62,8 @@ messages = {
     }
 }
 
-ignore_sites = ['.wikipedia.org', 'he-free.info',
-                'lrd.yahooapis.com']  # TODO: fill it automatically from some source of blacklist/mirrors and forks
-
+ignore_sites = [re.compile('\.wikipedia\.org'), re.compile('he-free.info'),
+                re.compile('lrd.yahooapis.com')]
 
 class PlagiaBot:
     def __init__(self, site, generator, report_page=None):
@@ -155,7 +154,7 @@ class PlagiaBot:
             pywikibot.output("Sources found were:")
             report = []
             sources = [cp_source for cp_source in report_sources_response['sources'] if
-                       'linkurl' in cp_source and not any([True for ig in ignore_sites if ig in cp_source['linkurl']])]
+                       'linkurl' in cp_source and not any([ig.search(cp_source['linkurl']) for ig in ignore_sites])]
             num_sources = 0
             for source in sources:
                 if int(source['percent']) > MIN_PERCENTAGE:
@@ -164,7 +163,7 @@ class PlagiaBot:
                         req_source = requests.get(source['linkurl'])
                         if req_source.status_code == 200:
                             title_encode = urllib.quote(article_title)
-                            mirror_re = re.compile('wikipedia.org/wiki/(%s|%s)' % (
+                            mirror_re = re.compile('(wikipedia.org/w(iki/|/index.php\?title=)(%s|%s)|material from the Wikipedia article)' % (
                                 re.sub('[ _]', '[ _]', re.escape(article_title)), title_encode))
                             if any(mirror_re.findall(req_source.text)):
                                 hint_text = '<span class="success">Mirror?</span>'
@@ -173,11 +172,11 @@ class PlagiaBot:
                                                req_source.text)):
                                 hint_text = '<span class="success">(CC-BY-SA)</span>'
                             elif any(re.findall('domain is for sale|buy this domain', req_source.text, re.I)) or \
-                                    (re.search('<html>', req_source.text, re.I) and
-                                        len(re.findall('<a [^>]*>', req_source.text, re.I)) < 5):
+                                    (re.search('<html', req_source.text, re.I) and
+                                        len(re.findall('<a [^>]*>', req_source.text, re.I)) < 10):
                                 hint_text = '<span class="error">Low quality site</span>'
-                                # continue  #  low quality sites
-                        elif req_source.status_code == 404:
+                                continue  #  low quality sites
+                        elif req_source.status_code in [403,404, 500]:
                             continue  # low quality source - ignore
                         num_sources += 1
                     except requests.exceptions.ConnectionError:
@@ -374,11 +373,30 @@ from
     return changes
 
 
+def parse_blacklist(page_name):
+    """
+    Backlist format: # to end is comment. every line is regex.
+    """
+    page = pywikibot.Page(pywikibot.getSite(), page_name)
+    blackList=page.get()
+    blacklist_sites = [re.sub('(#|==).*$', '', line).strip() for line in blackList.splitlines()[1:]]
+    blacklist_sites = filter(lambda line: len(line)>0, blacklist_sites)
+    reblacklist = []
+    for ig_site in blacklist_sites:
+        try:
+            reblacklist.append(re.compile(ig_site))
+        except Exception as e:
+            print('Error for regex:' + ig_site)
+            print(e)
+    return reblacklist
+
+
 def main(*args):
     """
     Handle arguments using standard pywikibot args handling and then runs the bot main functionality.
 
     """
+    global ignore_sites
     report_page = None
 
     report_page = None
@@ -396,6 +414,9 @@ def main(*args):
             generator = [(p, p.latestRevision(), p.previousRevision()) for p in source]
         elif arg.startswith('-report:'):
             report_page = arg[len("-report:"):]
+        elif arg.startswith('-blacklist:'):
+            ignore_sites = parse_blacklist(arg[len("-blacklist:"):])
+            #print('Blacklist:'+'\n'.join([x.pattern for x in ignore_sites]))
 
     if generator is None:
         pywikibot.showHelp()
