@@ -8,9 +8,9 @@ to find copyright violations.
 Output can be to console (default) or to wiki page 
 
 Command line options:
-    -report:Page 		page name to write report to.
-    -talkTempalte:XX	Run on diffs of a pages with talk page containing {{talkTemplate}}
-    -recentchanges:X	Number of days to fetch recent changes. For 12 hours set 0.5.
+    -report:Page        page name to write report to.
+    -talkTempalte:XX    Run on diffs of a pages with talk page containing {{talkTemplate}}
+    -recentchanges:X    Number of days to fetch recent changes. For 12 hours set 0.5.
 
 Usage examples:
 
