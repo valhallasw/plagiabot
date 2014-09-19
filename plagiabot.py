@@ -8,9 +8,9 @@ to find copyright violations.
 Output can be to console (default) or to wiki page 
 
 Command line options:
-    -report:Page        page name to write report to.
-    -talkTempalte:XX    Run on diffs of a pages with talk page containing {{talkTemplate}}
-    -recentchanges:X    Number of days to fetch recent changes. For 12 hours set 0.5.
+    -report:Page 		page name to write report to.
+    -talkTempalte:XX	Run on diffs of a pages with talk page containing {{talkTemplate}}
+    -recentchanges:X	Number of days to fetch recent changes. For 12 hours set 0.5.
 
 Usage examples:
 
@@ -163,14 +163,19 @@ class PlagiaBot:
                         req_source = requests.get(source['linkurl'])
                         if req_source.status_code == 200:
                             title_encode = urllib.quote(article_title)
-                            mirror_re = re.compile('(wikipedia.org/w(iki/|/index.php\?title=)(%s|%s)|material from the Wikipedia article)' % (
-                                re.sub('[ _]', '[ _]', re.escape(article_title)), title_encode))
+                            mirror_re = re.compile('(wikipedia.org/w(iki/|/index.php\?title=)(%s|%s)|material from the Wikipedia article|From Wikipedia)' % (
+                                re.sub('[ _]', '[ _]', re.escape(article_title)), title_encode), re.I)
                             if any(mirror_re.findall(req_source.text)):
                                 hint_text = '<span class="success">Mirror?</span>'
                             elif any(
-                                    re.findall('Licensed under the <a href="http://creativecommons.org/licenses/by-sa/',
-                                               req_source.text)):
-                                hint_text = '<span class="success">(CC-BY-SA)</span>'
+                                    re.findall('under (the terms of the Creative Commons Attribution License)|<a href="http://creativecommons.org/licenses/',
+                                               req_source.text, re.I)):
+                                if any(re.findall('<a href="http://creativecommons.org/licenses/(.+?)/', req_source.text, re.I)):
+                                    cc_type = re.search('<a href="http://creativecommons.org/licenses/(.+?)/', req_source.text, re.I)
+                                    hint_text = '<span class="success">(CC-'+cc_type.group(1)+')</span>'
+                                else:
+                                    hint_text = '<span class="success">(CC) (is it NC?)</span>'
+
                             elif any(re.findall('domain is for sale|buy this domain', req_source.text, re.I)) or \
                                     (re.search('<html', req_source.text, re.I) and
                                         len(re.findall('<a [^>]*>', req_source.text, re.I)) < 10):
@@ -192,6 +197,24 @@ class PlagiaBot:
             report = '\n'.join(report)
             return report
 
+    def remove_wikitext(self, text):
+        # clean some html/wikitext from the text before sending to server...
+        # you may use mwparserfromhell to get cleaner text (but this requires dependency...)
+        clean_text = pywikibot.removeHTMLParts(text, keeptags=[])
+        clean_text = re.sub("\[\[[^\[\]]+\|([^\[\]]+)\]\]", "\\1", clean_text)  # [[link|textlink]]
+        clean_text = re.sub("\[\[(.+?)\]\]", "\\1", clean_text)  # [[links]]
+        clean_text = re.sub("\w+\s+=\s+(\".+\"|[^\"].+? )", "",
+                                 clean_text)  # common in wikitables (align|class|style) etc
+
+        orig = clean_text
+        same = False
+        while not same:
+            clean_text = re.sub("\{\{[^\}]*?\}\}", "", clean_text)  # templates
+            same = clean_text == orig
+            orig = clean_text
+        clean_text = re.sub("\[https?:.*?\]", "", clean_text)  # external links
+        return clean_text
+
     def run(self):
         global MIN_SIZE
         if self.report_page is None:
@@ -212,8 +235,8 @@ class PlagiaBot:
                 self.site.loadrevisions(p,
                                         getText=True,
                                         revids=[new_rev, prev_rev])
-                old = "" if prev_rev == 0 else p.getOldVersion(prev_rev).splitlines(1)
-                new = p.getOldVersion(new_rev).splitlines(1)
+                old = "" if prev_rev == 0 else self.remove_wikitext(p.getOldVersion(prev_rev)).splitlines(1)
+                new = self.remove_wikitext(p.getOldVersion(new_rev)).splitlines(1)
                 editor = p._revisions[new_rev].user  # TODO: is there a non private access to user in revisions?
                 comment = p._revisions[new_rev].comment
                 diff_date = p._revisions[new_rev].timestamp
@@ -232,18 +255,6 @@ class PlagiaBot:
             # clean some html/wikitext from the text before sending to server...
             # you may use mwparserfromhell to get cleaner text (but this requires dependency...)
             added_lines = pywikibot.removeHTMLParts(u'\n'.join(diff), keeptags=[])
-            added_lines = re.sub("\[\[[^\[\]]+\|([^\[\]]+)\]\]", "\\1", added_lines)  # [[link|textlink]]
-            added_lines = re.sub("\[\[(.+?)\]\]", "\\1", added_lines)  # [[links]]
-            added_lines = re.sub("\w+\s+=\s+(\".+\"|[^\"].+? )", "",
-                                 added_lines)  # common in wikitables (align|class|style) etc
-
-            orig = added_lines
-            same = False
-            while not same:
-                added_lines = re.sub("\{\{[^\}]*?\}\}", "", added_lines)  # templates
-                same = added_lines == orig
-                orig = added_lines
-            added_lines = re.sub("\[https?:.*?\]", "", added_lines)  # external links
             if len(added_lines) > MIN_SIZE:
                 pywikibot.output('Uploading to server')
                 pywikibot.output('-------------------')
@@ -268,7 +279,7 @@ class PlagiaBot:
         report_template = u"""
 |- valign="top"
 | [[{title}]]
-| {diff_date} ({{{{{diffTemplate}|{title}|{new}|{old}}}}})
+| {diff_date} ({{{{{diffTemplate}|{title}|{new}|{old}}}}}, [{{{{fullurl:{title}|action=history}}}} {{{{subst:MediaWiki:History}}}}])
 | [[User:{user}|]] ([[User talk:{user}|{{{{subst:MediaWiki:Talk}}}}]])
 |
 {source}
@@ -347,7 +358,7 @@ from
         rc_new_len-rc_old_len>500 and
         rc_comment not rlike '%s'
     order by  rc_new_len-rc_old_len desc
-''' % (talk_sql, date_limit, ignore_summary))
+''' % (talk_sql, date_limit, ignore_summary.encode('utf-8')))
     cursor.execute('''/* copyright */
 select rc_this_oldid, rc_last_oldid, rc_title, rc_new_len-rc_old_len as diffSize
 from
