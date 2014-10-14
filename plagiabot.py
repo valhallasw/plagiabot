@@ -38,7 +38,7 @@ import urllib
 
 MIN_SIZE = 500  # minimum length of added text for sending to server
 MIN_PERCENTAGE = 50
-
+DIFF_URL = '//tools.wmflabs.org/eranbot/ithenticate.py?rid=%s'
 messages = {
     'en': {
         'table-title': 'Title',
@@ -48,7 +48,7 @@ messages = {
         'template-diff': u'Diff',
         'table-source': 'Source',
         'update-summary': 'Update',
-        'ignore_summary': '\[*(Reverted|Undid revision)'
+        'ignore_summary': '\[*(Reverted|Undid revision|rv$)'
     },
     'he': {
         'table-title': u'כותרת',
@@ -61,7 +61,7 @@ messages = {
         'ignore_summary': u'(שוחזר מעריכות של|ביטול גרסה|שחזור עריכות)'
     }
 }
-
+DEBUG_MODE = False
 ignore_sites = [re.compile('\.wikipedia\.org'), re.compile('he-free.info'),
                 re.compile('lrd.yahooapis.com')]
 
@@ -127,8 +127,8 @@ class PlagiaBot:
             print(submit_response)
             raise
 
-    def poll_response(self, upload_id, article_title):
-        global MIN_PERCENTAGE
+    def poll_response(self, upload_id, article_title, added_lines):
+        global MIN_PERCENTAGE, DIFF_URL
         pywikibot.output("Polling iThenticate until document has been processed...", newline=False)
 
         while True:
@@ -160,29 +160,31 @@ class PlagiaBot:
                 if int(source['percent']) > MIN_PERCENTAGE:
                     hint_text = ''
                     try:
-                        req_source = requests.get(source['linkurl'])
-                        if req_source.status_code == 200:
-                            title_encode = urllib.quote(article_title)
-                            mirror_re = re.compile('(wikipedia.org/w(iki/|/index.php\?title=)(%s|%s)|material from the Wikipedia article|From Wikipedia)' % (
-                                re.sub('[ _]', '[ _]', re.escape(article_title)), title_encode), re.I)
-                            if any(mirror_re.findall(req_source.text)):
-                                hint_text = '<span class="success">Mirror?</span>'
-                            elif any(
-                                    re.findall('under (the terms of the Creative Commons Attribution License)|<a href="http://creativecommons.org/licenses/',
-                                               req_source.text, re.I)):
-                                if any(re.findall('<a href="http://creativecommons.org/licenses/(.+?)/', req_source.text, re.I)):
-                                    cc_type = re.search('<a href="http://creativecommons.org/licenses/(.+?)/', req_source.text, re.I)
-                                    hint_text = '<span class="success">(CC-'+cc_type.group(1)+')</span>'
-                                else:
-                                    hint_text = '<span class="success">(CC) (is it NC?)</span>'
-
-                            elif any(re.findall('domain is for sale|buy this domain', req_source.text, re.I)) or \
-                                    (re.search('<html', req_source.text, re.I) and
-                                        len(re.findall('<a [^>]*>', req_source.text, re.I)) < 10):
-                                hint_text = '<span class="error">Low quality site</span>'
-                                continue  #  low quality sites
-                        elif req_source.status_code in [403,404, 500]:
-                            continue  # low quality source - ignore
+                        if source['linkurl'] in added_lines:  # the source is mentioned in the added text
+                            hint_text = '<span class="success">citation</span>'
+                        else:
+                            req_source = requests.get(source['linkurl'])
+                            if req_source.status_code == 200:
+                                title_encode = urllib.quote(article_title)
+                                mirror_re = re.compile('(wikipedia.org/w(iki/|/index.php\?title=)(%s|%s)|material from the Wikipedia article|From Wikipedia|source: wikipedia.org)' % (
+                                    re.sub('[ _]', '[ _]', re.escape(article_title)), title_encode), re.I)
+                                if any(mirror_re.findall(req_source.text)):
+                                    hint_text = '<span class="success">Mirror?</span>'
+                                elif any(
+                                        re.findall('under (the terms of the Creative Commons Attribution License)|<a href="http://creativecommons.org/licenses/',
+                                                   req_source.text, re.I)):
+                                    if any(re.findall('<a href="http://creativecommons.org/licenses/(.+?)/', req_source.text, re.I)):
+                                        cc_type = re.search('<a href="http://creativecommons.org/licenses/(.+?)/', req_source.text, re.I)
+                                        hint_text = '<span class="success">(CC-'+cc_type.group(1)+')</span>'
+                                    else:
+                                        hint_text = '<span class="success">(CC) (is it NC?)</span>'
+                                elif any(re.findall('domain is for sale|buy this domain|get your domain name', req_source.text, re.I)) or \
+                                        (re.search('<html', req_source.text, re.I) and
+                                            len(re.findall('<a [^>]*>', req_source.text, re.I)) < 10):
+                                    hint_text = '<span class="error">Low quality site</span>'
+                                    continue  #  low quality sites
+                            elif req_source.status_code in [403,404, 500]:
+                                continue  # low quality source - ignore
                         num_sources += 1
                     except requests.exceptions.ConnectionError:
                         hint_text = '<span class="error">connection error</span>'
@@ -194,7 +196,7 @@ class PlagiaBot:
                         source['collection'][0], source['percent'], source['word_count'], source['linkurl'], hint_text))
                     if num_sources == 3:
                         break
-            report = '\n'.join(report)
+            report = '[%s report]\n'%DIFF_URL%part['id']+'\n'.join(report) if len(report)>0 else ''
             return report
 
     def remove_wikitext(self, text):
@@ -203,8 +205,7 @@ class PlagiaBot:
         clean_text = pywikibot.removeHTMLParts(text, keeptags=[])
         clean_text = re.sub("\[\[[^\[\]]+\|([^\[\]]+)\]\]", "\\1", clean_text)  # [[link|textlink]]
         clean_text = re.sub("\[\[(.+?)\]\]", "\\1", clean_text)  # [[links]]
-        clean_text = re.sub("\w+\s+=\s+(\".+\"|[^\"].+? )", "",
-                                 clean_text)  # common in wikitables (align|class|style) etc
+        clean_text = re.sub("(align|class|style)\s*=\s*(\".+?\"|[^\"].+? )", "", clean_text)  # common in wikitables (align|class|style) etc
 
         orig = clean_text
         same = False
@@ -216,7 +217,7 @@ class PlagiaBot:
         return clean_text
 
     def run(self):
-        global MIN_SIZE
+        global MIN_SIZE, DEBUG_MODE
         if self.report_page is None:
             orig_report = [""]
         else:
@@ -235,8 +236,8 @@ class PlagiaBot:
                 self.site.loadrevisions(p,
                                         getText=True,
                                         revids=[new_rev, prev_rev])
-                old = "" if prev_rev == 0 else self.remove_wikitext(p.getOldVersion(prev_rev)).splitlines(1)
-                new = self.remove_wikitext(p.getOldVersion(new_rev)).splitlines(1)
+                old = "" if prev_rev == 0 else self.remove_wikitext(p.getOldVersion(prev_rev))
+                new = self.remove_wikitext(p.getOldVersion(new_rev))
                 editor = p._revisions[new_rev].user  # TODO: is there a non private access to user in revisions?
                 comment = p._revisions[new_rev].comment
                 diff_date = p._revisions[new_rev].timestamp
@@ -250,7 +251,7 @@ class PlagiaBot:
             diffy = difflib.SequenceMatcher()
             diffy.set_seqs(old, new)
             diff = [''.join(new[after_start:after_end]) for opcode, before_start, before_end, after_start, after_end in
-                    diffy.get_opcodes() if opcode in ['insert', 'replace']]
+                    diffy.get_opcodes() if opcode in ['insert']]
 
             # clean some html/wikitext from the text before sending to server...
             # you may use mwparserfromhell to get cleaner text (but this requires dependency...)
@@ -258,6 +259,8 @@ class PlagiaBot:
             if len(added_lines) > MIN_SIZE:
                 pywikibot.output('Uploading to server')
                 pywikibot.output('-------------------')
+                if DEBUG_MODE:
+                    continue
                 try:
                     upload_id = self.upload_diff(added_lines.encode('utf8'), p.title(), "/%i" % new_rev)
                     uploads.append(({
@@ -265,7 +268,7 @@ class PlagiaBot:
                                         u'user': editor,
                                         u'new': new_rev,
                                         u'old': prev_rev,
-                                        u'diff_date': diff_date}, upload_id))
+                                        u'diff_date': diff_date}, upload_id, added_lines))
                 except:
                     print('Skipping - due to error')
                     continue
@@ -273,15 +276,15 @@ class PlagiaBot:
                 pywikibot.output('Change is too small - skipping')
 
         pywikibot.output('Polling uploads')
-        reports_source = [{'source': self.poll_response(upload_id, rev_details['title']),
-                           'diffTemplate': local_messages['template-diff']} for rev_details, upload_id in uploads]
+        reports_source = [{'source': self.poll_response(upload_id, rev_details['title'], added_lines),
+                           'diffTemplate': local_messages['template-diff']} for rev_details, upload_id, added_lines in uploads]
 
         report_template = u"""
 |- valign="top"
 | [[{title}]]
 | {diff_date} ({{{{{diffTemplate}|{title}|{new}|{old}}}}}, [{{{{fullurl:{title}|action=history}}}} {{{{subst:MediaWiki:History}}}}])
 | [[User:{user}|]] ([[User talk:{user}|{{{{subst:MediaWiki:Talk}}}}]])
-|
+| style="font-size:small" |
 {source}
 |"""
         reports_details = [dict(details[0].items() + source.items()) for details, source in zip(uploads, reports_source)
@@ -407,7 +410,7 @@ def main(*args):
     Handle arguments using standard pywikibot args handling and then runs the bot main functionality.
 
     """
-    global ignore_sites
+    global ignore_sites, DEBUG_MODE
     report_page = None
 
     report_page = None
@@ -425,6 +428,9 @@ def main(*args):
             generator = [(p, p.latestRevision(), p.previousRevision()) for p in source]
         elif arg.startswith('-report:'):
             report_page = arg[len("-report:"):]
+        elif arg.startswith('-debug_mode'):
+            DEBUG_MODE = True
+            print('DEBUG MODE!')
         elif arg.startswith('-blacklist:'):
             ignore_sites = parse_blacklist(arg[len("-blacklist:"):])
             #print('Blacklist:'+'\n'.join([x.pattern for x in ignore_sites]))
