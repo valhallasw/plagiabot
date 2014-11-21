@@ -38,6 +38,7 @@ import urllib
 
 MIN_SIZE = 500  # minimum length of added text for sending to server
 MIN_PERCENTAGE = 50
+WORDS_QUOTE = 50
 DIFF_URL = '//tools.wmflabs.org/eranbot/ithenticate.py?rid=%s'
 messages = {
     'en': {
@@ -48,7 +49,8 @@ messages = {
         'template-diff': u'Diff',
         'table-source': 'Source',
         'update-summary': 'Update',
-        'ignore_summary': '\[*(Reverted|Undid revision|rv$)'
+        'ignore_summary': '\[*(Reverted|Undid revision|rv$)',
+        'rollback_of_summary': 'Reverted .*?edits? by (\[\[User:)?{0}|Undid revision {1}|Reverting possible vandalism by (\[\[User:)?{0}'
     },
     'he': {
         'table-title': u'כותרת',
@@ -58,8 +60,9 @@ messages = {
         'template-diff': u'הבדל',
         'table-source': u'מקורות',
         'update-summary': u'עדכון',
-        'ignore_summary': u'(שוחזר מעריכות של|ביטול גרסה|שחזור עריכות)'
-    }
+        'ignore_summary': u'(שוחזר מעריכות של|ביטול גרסה|שחזור עריכות)',
+        'rollback_of_summary': u'שוחזר מעריכ(ה|ות) של (\[\[User:|\[\[משתמש:)?{0}|ביטול גרסה {1}'
+   }
 }
 DEBUG_MODE = False
 ignore_sites = [re.compile('\.wikipedia\.org'), re.compile('he-free.info'),
@@ -160,7 +163,7 @@ class PlagiaBot:
                 if int(source['percent']) > MIN_PERCENTAGE:
                     hint_text = ''
                     try:
-                        if source['linkurl'] in added_lines:  # the source is mentioned in the added text
+                        if source['linkurl'].lower() in added_lines.lower():  # the source is mentioned in the added text
                             hint_text = '<span class="success">citation</span>'
                         else:
                             req_source = requests.get(source['linkurl'])
@@ -178,7 +181,7 @@ class PlagiaBot:
                                         hint_text = '<span class="success">(CC-'+cc_type.group(1)+')</span>'
                                     else:
                                         hint_text = '<span class="success">(CC) (is it NC?)</span>'
-                                elif any(re.findall('domain is for sale|buy this domain|get your domain name', req_source.text, re.I)) or \
+                                elif len(req_source.text)<5 or any(re.findall('domain is for sale|buy this domain|get your domain name', req_source.text, re.I)) or \
                                         (re.search('<html', req_source.text, re.I) and
                                             len(re.findall('<a [^>]*>', req_source.text, re.I)) < 10):
                                     hint_text = '<span class="error">Low quality site</span>'
@@ -192,8 +195,8 @@ class PlagiaBot:
                     except:
                         num_sources += 1
                         pass
-                    report.append("* %s % 3i%% %i words at %s %s" % (
-                        source['collection'][0], source['percent'], source['word_count'], source['linkurl'], hint_text))
+                    report.append("* %s % 3i%% %i words at [%s %s] %s" % (
+                        source['collection'][0], source['percent'], source['word_count'], source['linkurl'], source['linkurl'][:100], hint_text))
                     if num_sources == 3:
                         break
             report = '[%s report]\n'%DIFF_URL%part['id']+'\n'.join(report) if len(report)>0 else ''
@@ -202,7 +205,13 @@ class PlagiaBot:
     def remove_wikitext(self, text):
         # clean some html/wikitext from the text before sending to server...
         # you may use mwparserfromhell to get cleaner text (but this requires dependency...)
-        clean_text = pywikibot.removeHTMLParts(text, keeptags=[])
+        global WORDS_QUOTE
+        #remove refs
+        refs = re.findall('<ref(?: .+?)?>(.*?)</ref>', text)
+        for ref in refs:
+            if ref.count(' ') < WORDS_QUOTE:
+                text = text.replace(ref, '')
+        clean_text = pywikibot.textlib.removeHTMLParts(text, keeptags=[])
         clean_text = re.sub("\[\[[^\[\]]+\|([^\[\]]+)\]\]", "\\1", clean_text)  # [[link|textlink]]
         clean_text = re.sub("\[\[(.+?)\]\]", "\\1", clean_text)  # [[links]]
         clean_text = re.sub("(align|class|style)\s*=\s*(\".+?\"|[^\"].+? )", "", clean_text)  # common in wikitables (align|class|style) etc
@@ -216,16 +225,62 @@ class PlagiaBot:
         clean_text = re.sub("\[https?:.*?\]", "", clean_text)  # external links
         return clean_text
 
-    def run(self):
-        global MIN_SIZE, DEBUG_MODE
-        if self.report_page is None:
-            orig_report = [""]
-        else:
+    def was_rolledback(self, page, new_rev, added_lines):
+        rolledback = False
+        
+        self.site.loadrevisions(page, startid=new_rev,rvdir=True)
+
+        #Check whether the add lines exists in the current version or not
+        current_text = pywikibot.textlib.removeHTMLParts(self.remove_wikitext(page.text))
+        current_check = difflib.SequenceMatcher(None, added_lines, current_text)
+        current_match = current_check.find_longest_match(0,len(added_lines),0,len(current_text))
+        if float(current_match.size)/len(added_lines) > 0.8:
+            pywikibot.output("Added lines don't exist in current version - skipping")
+            return True
+
+        # alternatily look for rollback of that revision
+        editor = page._revisions[new_rev].user
+        local_messages = messages[self.site.lang] if self.site.lang in messages else messages['en']
+
+        reverted_edit = re.compile(local_messages['rollback_of_summary'].format(editor, new_rev))
+        for rev in page._revisions:
+            user = page._revisions[rev].user
+            comment = page._revisions[rev].comment
+            is_the_editor = editor in comment
+            is_revert = reverted_edit.match(comment)
+            if is_revert and is_the_editor:
+                print('Was rolledback by {}: {}'.format(user,comment))
+                rolledback = True
+        return rolledback
+
+    def remove_moved_content(self, page, prev_rev, content, comment):
+        self.site.loadrevisions(page, startid=prev_rev, getText=True, total=3)
+        for rev in page._revisions:
+            if rev>=prev_rev: continue
+            old_content = self.remove_wikitext(page.getOldVersion(rev))
+            content = u'\n'.join([line for line in content.split(u'\n') if line not in old_content])
+            #break
+
+        if len(content) < 500:
+            return content
+
+        # moved content indicated from the comment itself
+        possible_articles = re.findall('\[\[(.*?)\]\]', comment)
+        for pos_article in possible_articles:
+            pos_page = pywikibot.Page(self.site, pos_article)
             try:
-                orig_report = self.report_page.get()
-                orig_report = orig_report.split('==', 1)
+                self.site.loadrevisions(pos_page, startid=prev_rev, getText=True, total=2)
+                for rev in pos_page._revisions:
+                    old_content = self.remove_wikitext(pos_page.getOldVersion(rev))
+                    content = u'\n'.join([line for line in content.split(u'\n') if line not in old_content])
             except:
-                orig_report = [""]
+                pass
+
+        # also invoke search to look in other articles?
+        return content
+ 
+    def run(self):
+        global MIN_SIZE, DEBUG_MODE, WORDS_QUOTE
         local_messages = messages[self.site.lang] if self.site.lang in messages else messages['en']
         uploads = []
         ignore_regex = re.compile(local_messages['ignore_summary'], re.I)
@@ -252,11 +307,24 @@ class PlagiaBot:
             diffy.set_seqs(old, new)
             diff = [''.join(new[after_start:after_end]) for opcode, before_start, before_end, after_start, after_end in
                     diffy.get_opcodes() if opcode in ['insert']]
+            diff = [new_t for new_t in u'\n'.join(diff).split(u'\n') if new_t not in old] # remove text appeared in original
 
             # clean some html/wikitext from the text before sending to server...
             # you may use mwparserfromhell to get cleaner text (but this requires dependency...)
-            added_lines = pywikibot.removeHTMLParts(u'\n'.join(diff), keeptags=[])
+            added_lines = pywikibot.textlib.removeHTMLParts(u'\n'.join(diff), keeptags=[])
             if len(added_lines) > MIN_SIZE:
+                # remove moved content (also avoids mirrors)
+                added_lines = self.remove_moved_content(p, prev_rev, added_lines, comment) 
+
+            added_lines = u'. '.join([new_t for new_t in added_lines.split(u'. ') if new_t not in old]) # remove text appeared in original
+
+            #remove quotation (for small quotes)
+            quotes = re.findall('".*?"[ ,\.;:<\{]', added_lines)
+            for quote in quotes:
+                if quote.count(' ') < WORDS_QUOTE:
+                    added_lines = added_lines.replace(quote, '')
+
+            if len(added_lines) > MIN_SIZE and not self.was_rolledback(p, new_rev, added_lines):
                 pywikibot.output('Uploading to server')
                 pywikibot.output('-------------------')
                 if DEBUG_MODE:
@@ -282,7 +350,7 @@ class PlagiaBot:
         report_template = u"""
 |- valign="top"
 | [[{title}]]
-| {diff_date} ({{{{{diffTemplate}|{title}|{new}|{old}}}}}, [{{{{fullurl:{title}|action=history}}}} {{{{subst:MediaWiki:History}}}}])
+| {diff_date} ({{{{{diffTemplate}|{title}|{new}|{old}}}}}, [{{{{fullurl:{title}|action=history}}}} {{{{subst:MediaWiki:Hist}}}}])
 | [[User:{user}|]] ([[User talk:{user}|{{{{subst:MediaWiki:Talk}}}}]])
 | style="font-size:small" |
 {source}
@@ -292,16 +360,24 @@ class PlagiaBot:
         reports_details = [report_template.format(**rep) for rep in reports_details]
 
         if len(reports_details) > 0:
-            reports = u"""== ~~~~~ ==
-{| class="wikitable sortable" style="width: 80%%;margin:auto;"
-! width="15%%" | %s !! width="10%%" | %s !! width="10%%" | %s !! %s !! %s
+            if self.report_page is None:
+                orig_report = [""]
+            else:
+                try:
+                    orig_report = self.report_page.get()
+                    orig_report = orig_report.split('\n|- valign="top"\n', 1)
+                except:
+                    orig_report = [""]
+            reports = u"""
+{| class="mw-datatable sortable" style="width: 90%%;margin:auto;"
+! style="width:15%%" | %s !! style="width:10%%" | %s !! style="width:50px" | %s !! %s !! style="width:150px;" |%s
 %s
 |}
 """ % (local_messages['table-title'], local_messages['table-diff'], local_messages['table-editor'],
        local_messages['table-source'], local_messages['table-status'], ''.join(reports_details))
 
             if len(orig_report) == 2:
-                reports = orig_report[0] + reports + "\n==" + orig_report[1]
+                reports = orig_report[0] + ''.join(reports_details) +'\n|- valign="top"\n'+ orig_report[1]
             else:
                 reports = orig_report[0] + reports
 
@@ -391,7 +467,7 @@ def parse_blacklist(page_name):
     """
     Backlist format: # to end is comment. every line is regex.
     """
-    page = pywikibot.Page(pywikibot.getSite(), page_name)
+    page = pywikibot.Page(pywikibot.Site(), page_name)
     blackList=page.get()
     blacklist_sites = [re.sub('(#|==).*$', '', line).strip() for line in blackList.splitlines()[1:]]
     blacklist_sites = filter(lambda line: len(line)>0, blacklist_sites)
@@ -416,7 +492,7 @@ def main(*args):
     report_page = None
     generator = None
     for arg in pywikibot.handleArgs(*args):
-        site = pywikibot.getSite()
+        site = pywikibot.Site()
         if arg.startswith('-talkTemplate:'):
             generator = db_changes_generator(site, talk_template=arg[len("-talkTemplate:"):])
         elif arg.startswith('-recentchanges:'):
@@ -438,7 +514,7 @@ def main(*args):
     if generator is None:
         pywikibot.showHelp()
     else:
-        bot = PlagiaBot(pywikibot.getSite(), generator, report_page)
+        bot = PlagiaBot(pywikibot.Site(), generator, report_page)
         bot.run()
 
 
