@@ -9,8 +9,11 @@ Output can be to console (default) or to wiki page
 
 Command line options:
     -report:Page 		page name to write report to.
-    -talkTempalte:XX	Run on diffs of a pages with talk page containing {{talkTemplate}}
+    -talkTemplate:Foo	Run on diffs of a pages with talk page containing {{Foo}}
     -recentchanges:X	Number of days to fetch recent changes. For 12 hours set 0.5.
+    -blacklist:Page     page containing a blacklist of sites to ignore (Wikipedia mirrors)
+                            [[User:EranBot/Copyright/Blacklist]] is collaboratively maintained
+                            blacklist for English Wikipedia.
 
 Usage examples:
 
