@@ -390,7 +390,7 @@ class PlagiaBot:
         else:
             pywikibot.output('No violation found!')
 
-def db_changes_from_list_generator(site, page_of_pages, days=0.5):
+def db_changes_from_list_generator(site, page_of_pages, days=8):
     """
     Generator for changes to pages linked from a specific page
     """
@@ -430,7 +430,7 @@ from
         rc_type < 5 and
         ug_group = 'bot'
     where ug_group is NULL and
-        rc_namespace=0 and
+        rc_namespace in (0,2) and
         rc_timestamp > %s and
         rc_new_len-rc_old_len>500 and
         rc_comment not rlike '%s'
