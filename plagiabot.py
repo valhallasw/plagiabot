@@ -18,13 +18,13 @@ Command line options:
 Usage examples:
 
 Report on possible violations in Wikiproject Medicine related articles:
-    python plagtarismbot.py -lang:en -report:"Wikipedia:MED/Copyright" -talkTemplate:"WikiProject_Medicine"
+    python plagiabot.py -lang:en -report:"Wikipedia:MED/Copyright" -talkTemplate:"WikiProject_Medicine"
 
 Report on possible violations in the last 3 days to console:
-    python plagtarismbot.py -recentchanges:3
+    python plagiabot.py -recentchanges:3
 
 Report on possible violations in the top 100 recent changes (no DB access required):
-    python plagtarismbot.py -api_recentchanges:100
+    python plagiabot.py -api_recentchanges:100
 """
 import time
 import datetime
