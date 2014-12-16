@@ -390,7 +390,76 @@ class PlagiaBot:
         else:
             pywikibot.output('No violation found!')
 
-
+def db_changes_from_list_generator(site, page_of_pages, days=0.5):
+    """
+    Generator for changes to pages linked from a specific page
+    """
+    pywikibot.output('Connecting to %s' % (dbsettings.host % site.dbName()))
+    conn = MySQLdb.connect(host=dbsettings.host % site.dbName(),
+                           db=dbsettings.dbname % site.dbName(),
+                           read_default_file=dbsettings.connect_file)
+    date_limit = (datetime.datetime.now() - datetime.timedelta(days=days)).strftime('%Y%m%d%H%M%S')
+    cursor = conn.cursor()
+    
+    list_sql = """
+inner join
+    (
+    select pl_title as page_title
+    from
+        pagelinks
+    inner join
+                page 
+        on 
+                page_id=pl_from
+        where 
+                pl_from= ( select page_id from page where page_title='%s' and page_namespace=4  ) )
+                pageofpages 
+        on 
+                rc_title=page_title
+""" % page_of_pages
+    ignore_summary = messages[site.lang]['ignore_summary'] if site.lang in messages else ''
+    print('''/* copyright */
+select rc_this_oldid, rc_last_oldid, rc_title, rc_new_len-rc_old_len as diffSize
+from
+    recentchanges
+%s
+    left join
+        user_groups
+    on
+        rc_user=ug_user and
+        rc_type < 5 and
+        ug_group = 'bot'
+    where ug_group is NULL and
+        rc_namespace=0 and
+        rc_timestamp > %s and
+        rc_new_len-rc_old_len>500 and
+        rc_comment not rlike '%s'
+    order by  rc_new_len-rc_old_len desc
+''' % (list_sql, date_limit, ignore_summary.encode('utf-8')))
+    cursor.execute('''/* copyright */
+select rc_this_oldid, rc_last_oldid, rc_title, rc_new_len-rc_old_len as diffSize
+from
+    recentchanges
+%s
+    left join
+        user_groups
+    on
+        rc_user=ug_user and
+        rc_type < 5 and
+        ug_group = 'bot'
+    where ug_group is NULL and
+        rc_namespace=0 and
+        rc_timestamp > %s and
+        rc_new_len-rc_old_len>500/* and
+        rc_comment not like '%%rollback%%'*/
+    order by  rc_new_len-rc_old_len desc
+''' % (list_sql, date_limit))
+    changes = []
+    for curid, prev_id, title, diffSize in cursor.fetchall():
+        changes.append((pywikibot.Page(site, title.decode('utf-8')), curid, prev_id))
+    pywikibot.output('Num changes: %i' % len(changes))
+    return changes
+    
 def db_changes_generator(site, talk_template=None, days=0.125):
     """
     Generator for changes in specific wikiproject
@@ -498,6 +567,8 @@ def main(*args):
         site = pywikibot.Site()
         if arg.startswith('-talkTemplate:'):
             generator = db_changes_generator(site, talk_template=arg[len("-talkTemplate:"):])
+        elif arg.startswith('-pagesLinkedFrom:'):
+            generator = db_changes_from_list_generator(site, page_of_pages=arg[len("-pagesLinkedFrom:"):])
         elif arg.startswith('-recentchanges:'):
             generator = db_changes_generator(site, days=float(arg[len("-recentchanges:"):]))
         elif arg.startswith('-api_recentchanges:'):
