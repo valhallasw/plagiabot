@@ -253,14 +253,14 @@ class PlagiaBot:
         local_messages = messages[self.site.lang] if self.site.lang in messages else messages['en']
         try:
 			reverted_edit = re.compile(local_messages['rollback_of_summary'].format(editor, new_rev))
-        for rev in page._revisions:
-			user = page._revisions[rev].user
-        comment = page._revisions[rev].comment
-        is_the_editor = editor in comment
-        is_revert = reverted_edit.match(comment)
-        if is_revert and is_the_editor:
-            print('Was rolledback by {}: {}'.format(user,comment))
-            rolledback = True
+			for rev in page._revisions:
+				user = page._revisions[rev].user
+				comment = page._revisions[rev].comment
+				is_the_editor = editor in comment
+				is_revert = reverted_edit.match(comment)
+				if is_revert and is_the_editor:
+					print('Was rolledback by {}: {}'.format(user,comment))
+					rolledback = True
         except:
             pass
         return rolledback
