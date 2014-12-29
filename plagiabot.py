@@ -400,6 +400,33 @@ class PlagiaBot:
         else:
             pywikibot.output('No violation found!')
 
+def articles_from_talk_template(site, talk_template, namespace=1):
+    """
+    Given a page in the Project: (Wikipedia:) namespace, compose the sql query for finding all articles linked from the page. The output can then be joined with additional sql queries to select recent changes to those articles.
+    """
+    
+    # Take a Project namespace page title, without namespace prefix, and find all the articles (or pages in another namespace) linked from it.
+
+
+
+    list_sql = """
+    select pl_title as page_title
+    from
+        templatelinks
+    inner join
+                page 
+        on 
+                page_id=tl_from and
+                page_namespace=1
+        where 
+                tl_title='%s' and
+                tl_namespace=10 and tl_from_namespace=%s
+                """ % (talk_template, namespace)
+
+    return list_sql
+
+
+
 def articles_from_list(site, page_of_pages, namespace=0):
     """
     Given a page in the Project: (Wikipedia:) namespace, compose the sql query for finding all articles linked from the page. The output can then be joined with additional sql queries to select recent changes to those articles.
@@ -415,7 +442,7 @@ def articles_from_list(site, page_of_pages, namespace=0):
         on 
                 page_id=pl_from
         where 
-                pl_from= ( select page_id from page where page_title='%s' and page_namespace='%s'  )
+                pl_from= ( select page_id from page where page_title='%s' and page_namespace=%s  )
 """ % (page_of_pages, namespace)
 
     return list_sql
@@ -435,7 +462,7 @@ def db_changes_generator(site, talk_template=None, page_of_pages=None, days=1, n
     
     # If page_of_pages parameter is given, get the query for the list of linked pages; otherwise, get an empty placeholder query.
     if page_of_pages:
-        list_of_pages = articles_from_list(site, page_of_pages, namespace)
+        list_of_pages = articles_from_list(site, page_of_pages, 4)
         sql_page_selects.append(list_of_pages)
     
     # If talk_template parameter is given, get the query for the list of linked pages; otherwise, get an empty placeholder query.
@@ -450,7 +477,7 @@ def db_changes_generator(site, talk_template=None, page_of_pages=None, days=1, n
         union_of_lists = " UNION ".join(x for x in sql_page_selects)
         pages = """
         inner join
-            ( '%s' )
+            ( %s )
             pages
         on
             rc_title=page_title
@@ -469,12 +496,12 @@ def db_changes_generator(site, talk_template=None, page_of_pages=None, days=1, n
                 rc_type < 5 and
                 ug_group = 'bot'
             where ug_group is NULL and
-                rc_namespace=0 and
+                rc_namespace=%s and
                 rc_timestamp > %s and
                 rc_new_len-rc_old_len>500/* and
                 rc_comment not like '%%rollback%%'*/
             order by  rc_new_len-rc_old_len desc
-        ''' % (pages, date_limit)
+        ''' % (pages, namespace, date_limit)
 
     ignore_summary = messages[site.lang]['ignore_summary'] if site.lang in messages else ''
     print(query)
@@ -516,6 +543,7 @@ def main(*args):
     talk_template = None
     page_of_pages = None
     days = None
+    namespace = 0
     genFactory = pagegenerators.GeneratorFactory()
 
     for arg in pywikibot.handleArgs(*args):
