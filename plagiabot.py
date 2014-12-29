@@ -49,6 +49,7 @@ docuReplacements = {
 MIN_SIZE = 500  # minimum length of added text for sending to server
 MIN_PERCENTAGE = 50
 WORDS_QUOTE = 50
+MAX_AGE = 1 # how many days worth of recent changes to check
 DIFF_URL = '//tools.wmflabs.org/eranbot/ithenticate.py?rid=%s'
 messages = {
     'en': {
@@ -544,6 +545,8 @@ def main(*args):
             generator = [(p, p.latestRevision(), 0) for p in gen]
 
     if (talk_template or page_of_pages or days):
+        if not days:
+            days = MAX_AGE
         generator =  db_changes_generator(site, talk_template, page_of_pages, days, namespace)
 
     if generator is None:
