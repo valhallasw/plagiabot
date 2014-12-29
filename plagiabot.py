@@ -15,6 +15,8 @@ Command line options:
                             [[User:EranBot/Copyright/Blacklist]] is collaboratively maintained
                             blacklist for English Wikipedia.
 
+&params;
+
 Usage examples:
 
 Report on possible violations in Wikiproject Medicine related articles:
@@ -36,8 +38,13 @@ import dbsettings
 import uuid
 import xmlrpclib
 import requests
-from plagiabot_config import ithenticate_user, ithenticate_password
 import urllib
+from plagiabot_config import ithenticate_user, ithenticate_password
+from pywikibot import pagegenerators
+
+docuReplacements = {
+    '&params;':     pagegenerators.parameterHelp,
+}
 
 MIN_SIZE = 500  # minimum length of added text for sending to server
 MIN_PERCENTAGE = 50
@@ -244,16 +251,18 @@ class PlagiaBot:
         # alternatily look for rollback of that revision
         editor = page._revisions[new_rev].user
         local_messages = messages[self.site.lang] if self.site.lang in messages else messages['en']
-
-        reverted_edit = re.compile(local_messages['rollback_of_summary'].format(editor, new_rev))
-        for rev in page._revisions:
-            user = page._revisions[rev].user
-            comment = page._revisions[rev].comment
-            is_the_editor = editor in comment
-            is_revert = reverted_edit.match(comment)
-            if is_revert and is_the_editor:
-                print('Was rolledback by {}: {}'.format(user,comment))
-                rolledback = True
+        try:
+	    reverted_edit = re.compile(local_messages['rollback_of_summary'].format(editor, new_rev))
+	    for rev in page._revisions:
+		user = page._revisions[rev].user
+		comment = page._revisions[rev].comment
+		is_the_editor = editor in comment
+		is_revert = reverted_edit.match(comment)
+		if is_revert and is_the_editor:
+		    print('Was rolledback by {}: {}'.format(user,comment))
+		    rolledback = True
+        except:
+            pass
         return rolledback
 
     def remove_moved_content(self, page, prev_rev, content, comment):
@@ -330,7 +339,7 @@ class PlagiaBot:
             if len(added_lines) > MIN_SIZE and not self.was_rolledback(p, new_rev, added_lines):
                 pywikibot.output('Uploading to server')
                 pywikibot.output('-------------------')
-                if DEBUG_MODE:
+                if DEBUG_MODE: #TODO: remove
                     continue
                 try:
                     upload_id = self.upload_diff(added_lines.encode('utf8'), p.title(), "/%i" % new_rev)
@@ -459,8 +468,9 @@ from
         changes.append((pywikibot.Page(site, title.decode('utf-8')), curid, prev_id))
     pywikibot.output('Num changes: %i' % len(changes))
     return changes
-    
-def db_changes_generator(site, talk_template=None, days=0.125):
+
+
+def db_changes_generator(site, talk_template=None, days=1):
     """
     Generator for changes in specific wikiproject
     """
@@ -563,6 +573,8 @@ def main(*args):
 
     report_page = None
     generator = None
+    genFactory = pagegenerators.GeneratorFactory()
+
     for arg in pywikibot.handleArgs(*args):
         site = pywikibot.Site()
         if arg.startswith('-talkTemplate:'):
@@ -583,7 +595,11 @@ def main(*args):
             print('DEBUG MODE!')
         elif arg.startswith('-blacklist:'):
             ignore_sites = parse_blacklist(arg[len("-blacklist:"):])
-            #print('Blacklist:'+'\n'.join([x.pattern for x in ignore_sites]))
+        elif genFactory.handleArg(arg):
+            # general page generators for checking the latest revision
+            gen = genFactory.getCombinedGenerator()
+            gen = pagegenerators.PreloadingGenerator(gen)
+            generator = [(p, p.latestRevision(), 0) for p in gen]
 
     if generator is None:
         pywikibot.showHelp()
