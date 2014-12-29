@@ -421,11 +421,9 @@ def articles_from_talk_template(site, talk_template):
         where 
                 tl_title='%s' and
                 tl_namespace=10 and tl_from_namespace=1
-                """ % (talk_template, namespace)
+                """ % (talk_template)
 
     return list_sql
-
-
 
 def articles_from_list(site, page_of_pages, namespace=0):
     """
@@ -582,7 +580,6 @@ def main(*args):
     else:
         bot = PlagiaBot(pywikibot.Site(), generator, report_page)
         bot.run()
-
 
 if __name__ == "__main__":
     try:
