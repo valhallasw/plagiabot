@@ -473,7 +473,7 @@ def db_changes_generator(site, talk_template=None, page_of_pages=None, days=1, n
                 rc_new_len-rc_old_len>500/* and
                 rc_comment not like '%%rollback%%'*/
             order by  rc_new_len-rc_old_len desc
-        ''' % (pages, date_limit))
+        ''' % (pages, date_limit)
 
     ignore_summary = messages[site.lang]['ignore_summary'] if site.lang in messages else ''
     print(query)
