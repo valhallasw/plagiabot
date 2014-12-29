@@ -400,7 +400,7 @@ class PlagiaBot:
         else:
             pywikibot.output('No violation found!')
 
-def articles_from_talk_template(site, talk_template, namespace=1):
+def articles_from_talk_template(site, talk_template):
     """
     Given a page in the Project: (Wikipedia:) namespace, compose the sql query for finding all articles linked from the page. The output can then be joined with additional sql queries to select recent changes to those articles.
     """
@@ -420,7 +420,7 @@ def articles_from_talk_template(site, talk_template, namespace=1):
                 page_namespace=1
         where 
                 tl_title='%s' and
-                tl_namespace=10 and tl_from_namespace=%s
+                tl_namespace=10 and tl_from_namespace=1
                 """ % (talk_template, namespace)
 
     return list_sql
@@ -467,7 +467,7 @@ def db_changes_generator(site, talk_template=None, page_of_pages=None, days=1, n
     
     # If talk_template parameter is given, get the query for the list of linked pages; otherwise, get an empty placeholder query.
     if talk_template:
-        templated_pages = articles_from_talk_template(site, talk_template, namespace)
+        templated_pages = articles_from_talk_template(site, talk_template)
         sql_page_selects.append(templated_pages)
 
     if len(sql_page_selects)==0:
