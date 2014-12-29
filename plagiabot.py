@@ -8,18 +8,22 @@ to find copyright violations.
 Output can be to console (default) or to wiki page 
 
 Command line options:
-    -report:Page        page name to write report to.
-    -talkTemplate:Foo   Run on diffs of a pages with talk page containing {{Foo}}
-    -recentchanges:X    Number of days to fetch recent changes. For 12 hours set 0.5.
-    -blacklist:Page     page containing a blacklist of sites to ignore (Wikipedia mirrors)
-                            [[User:EranBot/Copyright/Blacklist]] is collaboratively maintained
-                            blacklist for English Wikipedia.
+    -report:Page            page name to write report to.
+    -talkTemplate:Foo       Run on diffs of a pages with talk page containing {{Foo}}
+    -pagesLinkedFrom:Bar    Run on diffs of pages linked from the page [[Wikipedia:Bar]]
+    -recentchanges:X        Number of days to fetch recent changes. For 12 hours set 0.5.
+    -blacklist:Page         page containing a blacklist of sites to ignore (Wikipedia mirrors)
+                                [[User:EranBot/Copyright/Blacklist]] is collaboratively maintained
+                                blacklist for English Wikipedia.
 
 &params;
 
 Usage examples:
 
-Report on possible violations in Wikiproject Medicine related articles:
+Report on WikiProject Medicine articles AND pages linked from the [[Wikipedia:Education noticeboard/Incidents]]
+    python plagiabot.py -lang:en -report:"Wikipedia:MED/Copyright" -talkTemplate:"WikiProject_Medicine" -pagesLinkedFrom:"Education_noticeboard/Incidents" -blacklist:"User:EranBot/Copyright/Blacklist"
+
+Report on possible violations only on Wikiproject Medicine related articles:
     python plagiabot.py -lang:en -report:"Wikipedia:MED/Copyright" -talkTemplate:"WikiProject_Medicine"
 
 Report on possible violations in the last 3 days to console:
