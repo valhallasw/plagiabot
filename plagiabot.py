@@ -252,15 +252,15 @@ class PlagiaBot:
         editor = page._revisions[new_rev].user
         local_messages = messages[self.site.lang] if self.site.lang in messages else messages['en']
         try:
-			reverted_edit = re.compile(local_messages['rollback_of_summary'].format(editor, new_rev))
-			for rev in page._revisions:
-				user = page._revisions[rev].user
-				comment = page._revisions[rev].comment
-				is_the_editor = editor in comment
-				is_revert = reverted_edit.match(comment)
-				if is_revert and is_the_editor:
-					print('Was rolledback by {}: {}'.format(user,comment))
-					rolledback = True
+            reverted_edit = re.compile(local_messages['rollback_of_summary'].format(editor, new_rev))
+            for rev in page._revisions:
+                user = page._revisions[rev].user
+                comment = page._revisions[rev].comment
+                is_the_editor = editor in comment
+                is_revert = reverted_edit.match(comment)
+                if is_revert and is_the_editor:
+                    print('Was rolledback by {}: {}'.format(user,comment))
+                    rolledback = True
         except:
             pass
         return rolledback
@@ -290,7 +290,7 @@ class PlagiaBot:
 
         # also invoke search to look in other articles?
         return content
- 
+
     def run(self):
         global MIN_SIZE, DEBUG_MODE, WORDS_QUOTE
         local_messages = messages[self.site.lang] if self.site.lang in messages else messages['en']
@@ -434,46 +434,46 @@ def db_changes_generator(site, talk_template=None, page_of_pages=None, days=1, n
     
     # If page_of_pages parameter is given, get the query for the list of linked pages; otherwise, get an empty placeholder query.
     if page_of_pages:
-		list_of_pages = articles_from_list(site, page_of_pages, namespace)
+        list_of_pages = articles_from_list(site, page_of_pages, namespace)
         sql_page_selects.append(list_of_pages)
     
     # If talk_template parameter is given, get the query for the list of linked pages; otherwise, get an empty placeholder query.
     if talk_template:
-		templated_pages = articles_from_talk_template(site, talk_template, namespace)
-		sql_page_selects.append(templated_pages)
+        templated_pages = articles_from_talk_template(site, talk_template, namespace)
+        sql_page_selects.append(templated_pages)
 
-	if len(sql_page_selects)==0:
-		sql_join = ""
-	else:
-		# If there are multiple selects for sets of page titles, we want to get the union of these selects.
-		union_of_lists = " UNION ".join(x for x in sql_page_selects)
-		pages = """
-		inner join
-			( '%s' )
-			pages
-		on
-			rc_title=page_title
-			""" % union_of_lists
+    if len(sql_page_selects)==0:
+        sql_join = ""
+    else:
+        # If there are multiple selects for sets of page titles, we want to get the union of these selects.
+        union_of_lists = " UNION ".join(x for x in sql_page_selects)
+        pages = """
+        inner join
+            ( '%s' )
+            pages
+        on
+            rc_title=page_title
+            """ % union_of_lists
 
-	# Use the select for a set of pages to find changes to compose a query for changes to those pages
-	query = '''
-		select rc_this_oldid, rc_last_oldid, rc_title, rc_new_len-rc_old_len as diffSize
-		from
-			recentchanges
-		%s
-			left join
-				user_groups
-			on
-				rc_user=ug_user and
-				rc_type < 5 and
-				ug_group = 'bot'
-			where ug_group is NULL and
-				rc_namespace=0 and
-				rc_timestamp > %s and
-				rc_new_len-rc_old_len>500/* and
-				rc_comment not like '%%rollback%%'*/
-			order by  rc_new_len-rc_old_len desc
-		''' % (pages, date_limit))
+    # Use the select for a set of pages to find changes to compose a query for changes to those pages
+    query = '''
+        select rc_this_oldid, rc_last_oldid, rc_title, rc_new_len-rc_old_len as diffSize
+        from
+            recentchanges
+        %s
+            left join
+                user_groups
+            on
+                rc_user=ug_user and
+                rc_type < 5 and
+                ug_group = 'bot'
+            where ug_group is NULL and
+                rc_namespace=0 and
+                rc_timestamp > %s and
+                rc_new_len-rc_old_len>500/* and
+                rc_comment not like '%%rollback%%'*/
+            order by  rc_new_len-rc_old_len desc
+        ''' % (pages, date_limit))
 
     ignore_summary = messages[site.lang]['ignore_summary'] if site.lang in messages else ''
     print(query)
@@ -517,7 +517,7 @@ def main(*args):
     for arg in pywikibot.handleArgs(*args):
         site = pywikibot.Site()
         if arg.startswith('-talkTemplate:'):
-			talk_template=arg[len("-talkTemplate:"):]
+            talk_template=arg[len("-talkTemplate:"):]
         elif arg.startswith('-pagesLinkedFrom:'):
             page_of_pages=arg[len("-pagesLinkedFrom:"):]
         elif arg.startswith('-recentchanges:'):
@@ -540,8 +540,8 @@ def main(*args):
             gen = pagegenerators.PreloadingGenerator(gen)
             generator = [(p, p.latestRevision(), 0) for p in gen]
 
-	if (talk_template or page_of_pages or days):
-		generator =  db_changes_generator(site, talk_template, page_of_pages, days, namespace)
+    if (talk_template or page_of_pages or days):
+        generator =  db_changes_generator(site, talk_template, page_of_pages, days, namespace)
 
     if generator is None:
         pywikibot.showHelp()
