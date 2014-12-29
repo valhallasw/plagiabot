@@ -8,9 +8,9 @@ to find copyright violations.
 Output can be to console (default) or to wiki page 
 
 Command line options:
-    -report:Page 		page name to write report to.
-    -talkTemplate:Foo	Run on diffs of a pages with talk page containing {{Foo}}
-    -recentchanges:X	Number of days to fetch recent changes. For 12 hours set 0.5.
+    -report:Page        page name to write report to.
+    -talkTemplate:Foo   Run on diffs of a pages with talk page containing {{Foo}}
+    -recentchanges:X    Number of days to fetch recent changes. For 12 hours set 0.5.
     -blacklist:Page     page containing a blacklist of sites to ignore (Wikipedia mirrors)
                             [[User:EranBot/Copyright/Blacklist]] is collaboratively maintained
                             blacklist for English Wikipedia.
@@ -252,15 +252,15 @@ class PlagiaBot:
         editor = page._revisions[new_rev].user
         local_messages = messages[self.site.lang] if self.site.lang in messages else messages['en']
         try:
-	    reverted_edit = re.compile(local_messages['rollback_of_summary'].format(editor, new_rev))
-	    for rev in page._revisions:
-		user = page._revisions[rev].user
-		comment = page._revisions[rev].comment
-		is_the_editor = editor in comment
-		is_revert = reverted_edit.match(comment)
-		if is_revert and is_the_editor:
-		    print('Was rolledback by {}: {}'.format(user,comment))
-		    rolledback = True
+        reverted_edit = re.compile(local_messages['rollback_of_summary'].format(editor, new_rev))
+        for rev in page._revisions:
+        user = page._revisions[rev].user
+        comment = page._revisions[rev].comment
+        is_the_editor = editor in comment
+        is_revert = reverted_edit.match(comment)
+        if is_revert and is_the_editor:
+            print('Was rolledback by {}: {}'.format(user,comment))
+            rolledback = True
         except:
             pass
         return rolledback
@@ -399,20 +399,13 @@ class PlagiaBot:
         else:
             pywikibot.output('No violation found!')
 
-def db_changes_from_list_generator(site, page_of_pages, days=8):
+def articles_from_list(site, page_of_pages, namespace=0):
     """
-    Generator for changes to pages linked from a specific page
+    Given a page in the Project: (Wikipedia:) namespace, compose the sql query for finding all articles linked from the page. The output can then be joined with additional sql queries to select recent changes to those articles.
     """
-    pywikibot.output('Connecting to %s' % (dbsettings.host % site.dbName()))
-    conn = MySQLdb.connect(host=dbsettings.host % site.dbName(),
-                           db=dbsettings.dbname % site.dbName(),
-                           read_default_file=dbsettings.connect_file)
-    date_limit = (datetime.datetime.now() - datetime.timedelta(days=days)).strftime('%Y%m%d%H%M%S')
-    cursor = conn.cursor()
     
+    # Take a Project namespace page title, without namespace prefix, and find all the articles (or pages in another namespace) linked from it.
     list_sql = """
-inner join
-    (
     select pl_title as page_title
     from
         pagelinks
@@ -421,58 +414,14 @@ inner join
         on 
                 page_id=pl_from
         where 
-                pl_from= ( select page_id from page where page_title='%s' and page_namespace=4  ) )
-                pageofpages 
-        on 
-                rc_title=page_title
-""" % page_of_pages
-    ignore_summary = messages[site.lang]['ignore_summary'] if site.lang in messages else ''
-    print('''/* copyright */
-select rc_this_oldid, rc_last_oldid, rc_title, rc_new_len-rc_old_len as diffSize
-from
-    recentchanges
-%s
-    left join
-        user_groups
-    on
-        rc_user=ug_user and
-        rc_type < 5 and
-        ug_group = 'bot'
-    where ug_group is NULL and
-        rc_namespace in (0,2) and
-        rc_timestamp > %s and
-        rc_new_len-rc_old_len>500 and
-        rc_comment not rlike '%s'
-    order by  rc_new_len-rc_old_len desc
-''' % (list_sql, date_limit, ignore_summary.encode('utf-8')))
-    cursor.execute('''/* copyright */
-select rc_this_oldid, rc_last_oldid, rc_title, rc_new_len-rc_old_len as diffSize
-from
-    recentchanges
-%s
-    left join
-        user_groups
-    on
-        rc_user=ug_user and
-        rc_type < 5 and
-        ug_group = 'bot'
-    where ug_group is NULL and
-        rc_namespace=0 and
-        rc_timestamp > %s and
-        rc_new_len-rc_old_len>500/* and
-        rc_comment not like '%%rollback%%'*/
-    order by  rc_new_len-rc_old_len desc
-''' % (list_sql, date_limit))
-    changes = []
-    for curid, prev_id, title, diffSize in cursor.fetchall():
-        changes.append((pywikibot.Page(site, title.decode('utf-8')), curid, prev_id))
-    pywikibot.output('Num changes: %i' % len(changes))
-    return changes
+                pl_from= ( select page_id from page where page_title='%s' and page_namespace='%s'  )
+""" % (page_of_pages, namespace)
 
+    return list_sql
 
-def db_changes_generator(site, talk_template=None, days=1):
+def db_changes_generator(site, talk_template=None, page_of_pages=None, days=1, namespace=0):
     """
-    Generator for changes in specific wikiproject
+    Generator for changes to a set of pages
     """
     pywikibot.output('Connecting to %s' % (dbsettings.host % site.dbName()))
     conn = MySQLdb.connect(host=dbsettings.host % site.dbName(),
@@ -480,70 +429,62 @@ def db_changes_generator(site, talk_template=None, days=1):
                            read_default_file=dbsettings.connect_file)
     date_limit = (datetime.datetime.now() - datetime.timedelta(days=days)).strftime('%Y%m%d%H%M%S')
     cursor = conn.cursor()
-    if talk_template is None:
-        talk_sql = ""
-    else:
-        talk_sql = """
- inner join
-    (
-    select page_title as talk_title
-    from
-        templatelinks
-    inner join
-                page 
-        on 
-                page_id=tl_from and 
-                page_namespace=1 
-        where 
-                tl_title='%s' and
-                tl_namespace=10 and tl_from_namespace=1)
-                talkpagemed 
-        on 
-                rc_title=talk_title
-""" % talk_template
+    
+    sql_page_selects = []
+    
+    # If page_of_pages parameter is given, get the query for the list of linked pages; otherwise, get an empty placeholder query.
+    if page_of_pages:
+		list_of_pages = articles_from_list(site, page_of_pages, namespace)
+        sql_page_selects.append(list_of_pages)
+    
+    # If talk_template parameter is given, get the query for the list of linked pages; otherwise, get an empty placeholder query.
+    if talk_template:
+		templated_pages = articles_from_talk_template(site, talk_template, namespace)
+		sql_page_selects.append(templated_pages)
+
+	if len(sql_page_selects)==0:
+		sql_join = ""
+	else:
+		# If there are multiple selects for sets of page titles, we want to get the union of these selects.
+		union_of_lists = " UNION ".join(x for x in sql_page_selects)
+		pages = """
+		inner join
+			( '%s' )
+			pages
+		on
+			rc_title=page_title
+			""" % union_of_lists
+
+	# Use the select for a set of pages to find changes to compose a query for changes to those pages
+	query = '''
+		select rc_this_oldid, rc_last_oldid, rc_title, rc_new_len-rc_old_len as diffSize
+		from
+			recentchanges
+		%s
+			left join
+				user_groups
+			on
+				rc_user=ug_user and
+				rc_type < 5 and
+				ug_group = 'bot'
+			where ug_group is NULL and
+				rc_namespace=0 and
+				rc_timestamp > %s and
+				rc_new_len-rc_old_len>500/* and
+				rc_comment not like '%%rollback%%'*/
+			order by  rc_new_len-rc_old_len desc
+		''' % (pages, date_limit))
+
     ignore_summary = messages[site.lang]['ignore_summary'] if site.lang in messages else ''
-    print('''/* copyright */
-select rc_this_oldid, rc_last_oldid, rc_title, rc_new_len-rc_old_len as diffSize
-from
-    recentchanges
-%s
-    left join
-        user_groups
-    on
-        rc_user=ug_user and
-        rc_type < 5 and
-        ug_group = 'bot'
-    where ug_group is NULL and
-        rc_namespace=0 and
-        rc_timestamp > %s and
-        rc_new_len-rc_old_len>500 and
-        rc_comment not rlike '%s'
-    order by  rc_new_len-rc_old_len desc
-''' % (talk_sql, date_limit, ignore_summary.encode('utf-8')))
-    cursor.execute('''/* copyright */
-select rc_this_oldid, rc_last_oldid, rc_title, rc_new_len-rc_old_len as diffSize
-from
-    recentchanges
-%s
-    left join
-        user_groups
-    on
-        rc_user=ug_user and
-        rc_type < 5 and
-        ug_group = 'bot'
-    where ug_group is NULL and
-        rc_namespace=0 and
-        rc_timestamp > %s and
-        rc_new_len-rc_old_len>500/* and
-        rc_comment not like '%%rollback%%'*/
-    order by  rc_new_len-rc_old_len desc
-''' % (talk_sql, date_limit))
+    print(query)
+    
+    # Run the query
+    cursor.execute(query)
     changes = []
     for curid, prev_id, title, diffSize in cursor.fetchall():
         changes.append((pywikibot.Page(site, title.decode('utf-8')), curid, prev_id))
     pywikibot.output('Num changes: %i' % len(changes))
     return changes
-
 
 def parse_blacklist(page_name):
     """
@@ -570,19 +511,17 @@ def main(*args):
     """
     global ignore_sites, DEBUG_MODE
     report_page = None
-
-    report_page = None
     generator = None
     genFactory = pagegenerators.GeneratorFactory()
 
     for arg in pywikibot.handleArgs(*args):
         site = pywikibot.Site()
         if arg.startswith('-talkTemplate:'):
-            generator = db_changes_generator(site, talk_template=arg[len("-talkTemplate:"):])
+			talk_template=arg[len("-talkTemplate:"):]
         elif arg.startswith('-pagesLinkedFrom:'):
-            generator = db_changes_from_list_generator(site, page_of_pages=arg[len("-pagesLinkedFrom:"):])
+            page_of_pages=arg[len("-pagesLinkedFrom:"):]
         elif arg.startswith('-recentchanges:'):
-            generator = db_changes_generator(site, days=float(arg[len("-recentchanges:"):]))
+            days=float(arg[len("-recentchanges:"):])
         elif arg.startswith('-api_recentchanges:'):
             source = RecentChangesPageGenerator(namespaces=[0], showBot=False,
                                                 total=int(arg[len("-api_recentchanges:"):]), changetype=['edit'],
@@ -600,6 +539,9 @@ def main(*args):
             gen = genFactory.getCombinedGenerator()
             gen = pagegenerators.PreloadingGenerator(gen)
             generator = [(p, p.latestRevision(), 0) for p in gen]
+
+	if (talk_template or page_of_pages or days):
+		generator =  db_changes_generator(site, talk_template, page_of_pages, days, namespace)
 
     if generator is None:
         pywikibot.showHelp()
