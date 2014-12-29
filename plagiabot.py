@@ -512,6 +512,9 @@ def main(*args):
     global ignore_sites, DEBUG_MODE
     report_page = None
     generator = None
+    talk_template = None
+    page_of_pages = None
+    days = None
     genFactory = pagegenerators.GeneratorFactory()
 
     for arg in pywikibot.handleArgs(*args):
