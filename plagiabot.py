@@ -410,7 +410,7 @@ def articles_from_talk_template(site, talk_template, namespace=1):
 
 
     list_sql = """
-    select pl_title as page_title
+    select page_title
     from
         templatelinks
     inner join
@@ -420,7 +420,7 @@ def articles_from_talk_template(site, talk_template, namespace=1):
                 page_namespace=1
         where 
                 tl_title='%s' and
-                tl_namespace=10 and tl_from_namespace=%s
+                tl_namespace=10 and tl_from_namespace=%st
                 """ % (talk_template, namespace)
 
     return list_sql
