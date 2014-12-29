@@ -248,13 +248,13 @@ class PlagiaBot:
             pywikibot.output("Added lines don't exist in current version - skipping")
             return True
 
-        # alternatily look for rollback of that revision
+        # alternatively, look for rollback of that revision
         editor = page._revisions[new_rev].user
         local_messages = messages[self.site.lang] if self.site.lang in messages else messages['en']
         try:
-        reverted_edit = re.compile(local_messages['rollback_of_summary'].format(editor, new_rev))
+			reverted_edit = re.compile(local_messages['rollback_of_summary'].format(editor, new_rev))
         for rev in page._revisions:
-        user = page._revisions[rev].user
+			user = page._revisions[rev].user
         comment = page._revisions[rev].comment
         is_the_editor = editor in comment
         is_revert = reverted_edit.match(comment)
