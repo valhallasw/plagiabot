@@ -364,14 +364,12 @@ class PlagiaBot:
         reports_source = [{'source': self.poll_response(upload_id, rev_details['title'], added_lines),
                            'diffTemplate': local_messages['template-diff']} for rev_details, upload_id, added_lines in uploads]
 
+        # Define the format of an individual report row.
         report_template = u"""
-|- valign="top"
-| [[{title}]]
-| {diff_date} ({{{{{diffTemplate}|{title}|{new}|{old}}}}}, [{{{{fullurl:{title}|action=history}}}} {{{{subst:MediaWiki:Hist}}}}])
-| [[User:{user}|]] ([[User talk:{user}|{{{{subst:MediaWiki:Talk}}}}]])
-| style="font-size:small" |
+{{{{plagiabot row | article = {title} | timestamp = {diff_date} | diff = {new} | oldid = {old} | user = {user} | details =
 {source}
-|"""
+| status =
+}}}}"""
         reports_details = [dict(details[0].items() + source.items()) for details, source in zip(uploads, reports_source)
                            if len(source['source']) > 0]
         reports_details = [report_template.format(**rep) for rep in reports_details]
@@ -593,3 +591,4 @@ if __name__ == "__main__":
 
         traceback.print_exc()
         pywikibot.stopme()
+
