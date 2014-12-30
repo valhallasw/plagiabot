@@ -54,7 +54,7 @@ MIN_SIZE = 500  # minimum length of added text for sending to server
 MIN_PERCENTAGE = 50
 WORDS_QUOTE = 50
 MAX_AGE = 1 # how many days worth of recent changes to check
-DIFF_URL = '//tools.wmflabs.org/eranbot/ithenticate.py?rid=%s'
+DIFF_URL = '//tools.wmflabs.org/plaigsossbot/ithenticate.py?rid=%s'
 messages = {
     'en': {
         'table-title': 'Title',
