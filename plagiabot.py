@@ -8,22 +8,29 @@ to find copyright violations.
 Output can be to console (default) or to wiki page 
 
 Command line options:
-    -report:Page 		page name to write report to.
-    -talkTempalte:XX	Run on diffs of a pages with talk page containing {{talkTemplate}}
-    -recentchanges:X	Number of days to fetch recent changes. For 12 hours set 0.5.
+    -report:Page            page name to write report to.
+    -talkTemplate:Foo       Run on diffs of a pages with talk page containing {{Foo}}
+    -pagesLinkedFrom:Bar    Run on diffs of pages linked from the page [[Wikipedia:Bar]]
+    -recentchanges:X        Number of days to fetch recent changes. For 12 hours set 0.5.
+    -blacklist:Page         page containing a blacklist of sites to ignore (Wikipedia mirrors)
+                                [[User:EranBot/Copyright/Blacklist]] is collaboratively maintained
+                                blacklist for English Wikipedia.
 
 &params;
 
 Usage examples:
 
-Report on possible violations in Wikiproject Medicine related articles:
-    python plagtarismbot.py -lang:en -report:"Wikipedia:MED/Copyright" -talkTemplate:"WikiProject_Medicine"
+Report on WikiProject Medicine articles AND pages linked from the [[Wikipedia:Education noticeboard/Incidents]]
+    python plagiabot.py -lang:en -report:"Wikipedia:MED/Copyright" -talkTemplate:"WikiProject_Medicine" -pagesLinkedFrom:"Education_noticeboard/Incidents" -blacklist:"User:EranBot/Copyright/Blacklist"
+
+Report on possible violations only on Wikiproject Medicine related articles:
+    python plagiabot.py -lang:en -report:"Wikipedia:MED/Copyright" -talkTemplate:"WikiProject_Medicine"
 
 Report on possible violations in the last 3 days to console:
-    python plagtarismbot.py -recentchanges:3
+    python plagiabot.py -recentchanges:3
 
 Report on possible violations in the top 100 recent changes (no DB access required):
-    python plagtarismbot.py -api_recentchanges:100
+    python plagiabot.py -api_recentchanges:100
 """
 import time
 import datetime
@@ -46,7 +53,8 @@ docuReplacements = {
 MIN_SIZE = 500  # minimum length of added text for sending to server
 MIN_PERCENTAGE = 50
 WORDS_QUOTE = 50
-DIFF_URL = '//tools.wmflabs.org/eranbot/ithenticate.py?rid=%s'
+MAX_AGE = 1 # how many days worth of recent changes to check
+DIFF_URL = '//tools.wmflabs.org/plaigsossbot/ithenticate.py?rid=%s'
 messages = {
     'en': {
         'table-title': 'Title',
@@ -246,19 +254,19 @@ class PlagiaBot:
             pywikibot.output("Added lines don't exist in current version - skipping")
             return True
 
-        # alternatily look for rollback of that revision
+        # alternatively, look for rollback of that revision
         editor = page._revisions[new_rev].user
         local_messages = messages[self.site.lang] if self.site.lang in messages else messages['en']
         try:
-	    reverted_edit = re.compile(local_messages['rollback_of_summary'].format(editor, new_rev))
-	    for rev in page._revisions:
-		user = page._revisions[rev].user
-		comment = page._revisions[rev].comment
-		is_the_editor = editor in comment
-		is_revert = reverted_edit.match(comment)
-		if is_revert and is_the_editor:
-		    print('Was rolledback by {}: {}'.format(user,comment))
-		    rolledback = True
+            reverted_edit = re.compile(local_messages['rollback_of_summary'].format(editor, new_rev))
+            for rev in page._revisions:
+                user = page._revisions[rev].user
+                comment = page._revisions[rev].comment
+                is_the_editor = editor in comment
+                is_revert = reverted_edit.match(comment)
+                if is_revert and is_the_editor:
+                    print('Was rolledback by {}: {}'.format(user,comment))
+                    rolledback = True
         except:
             pass
         return rolledback
@@ -288,7 +296,7 @@ class PlagiaBot:
 
         # also invoke search to look in other articles?
         return content
- 
+
     def run(self):
         global MIN_SIZE, DEBUG_MODE, WORDS_QUOTE
         local_messages = messages[self.site.lang] if self.site.lang in messages else messages['en']
@@ -357,14 +365,12 @@ class PlagiaBot:
         reports_source = [{'source': self.poll_response(upload_id, rev_details['title'], added_lines, rev_details['new']),
                            'diffTemplate': local_messages['template-diff']} for rev_details, upload_id, added_lines in uploads]
 
+        # Define the format of an individual report row.
         report_template = u"""
-|- valign="top"
-| [[{title}]]
-| {diff_date} ({{{{{diffTemplate}|{title}|{new}|{old}}}}}, [{{{{fullurl:{title}|action=history}}}} {{{{subst:MediaWiki:Hist}}}}])
-| [[User:{user}|]] ([[User talk:{user}|{{{{subst:MediaWiki:Talk}}}}]])
-| style="font-size:small" |
+{{{{plagiabot row | article = {title} | timestamp = {diff_date} | diff = {new} | oldid = {old} | user = {user} | details =
 {source}
-|"""
+| status =
+}}}}"""
         reports_details = [dict(details[0].items() + source.items()) for details, source in zip(uploads, reports_source)
                            if len(source['source']) > 0]
         reports_details = [report_template.format(**rep) for rep in reports_details]
@@ -397,10 +403,54 @@ class PlagiaBot:
         else:
             pywikibot.output('No violation found!')
 
-
-def db_changes_generator(site, talk_template=None, days=1):
+def articles_from_talk_template(site, talk_template):
     """
-    Generator for changes in specific wikiproject
+    Given a page in the Project: (Wikipedia:) namespace, compose the sql query for finding all articles linked from the page. The output can then be joined with additional sql queries to select recent changes to those articles.
+    """
+    
+    # Take a Project namespace page title, without namespace prefix, and find all the articles (or pages in another namespace) linked from it.
+
+
+
+    list_sql = """
+    select page_title
+    from
+        templatelinks
+    inner join
+                page 
+        on 
+                page_id=tl_from and
+                page_namespace=1
+        where 
+                tl_title='%s' and
+                tl_namespace=10 and tl_from_namespace=1
+                """ % (talk_template)
+
+    return list_sql
+
+def articles_from_list(site, page_of_pages, namespace=0):
+    """
+    Given a page in the Project: (Wikipedia:) namespace, compose the sql query for finding all articles linked from the page. The output can then be joined with additional sql queries to select recent changes to those articles.
+    """
+    
+    # Take a Project namespace page title, without namespace prefix, and find all the articles (or pages in another namespace) linked from it.
+    list_sql = """
+    select pl_title as page_title
+    from
+        pagelinks
+    inner join
+                page 
+        on 
+                page_id=pl_from
+        where 
+                pl_from= ( select page_id from page where page_title='%s' and page_namespace=%s  )
+""" % (page_of_pages, namespace)
+
+    return list_sql
+
+def db_changes_generator(site, talk_template=None, page_of_pages=None, days=1, namespace=0):
+    """
+    Generator for changes to a set of pages
     """
     pywikibot.output('Connecting to %s' % (dbsettings.host % site.dbName()))
     conn = MySQLdb.connect(host=dbsettings.host % site.dbName(),
@@ -408,70 +458,62 @@ def db_changes_generator(site, talk_template=None, days=1):
                            read_default_file=dbsettings.connect_file)
     date_limit = (datetime.datetime.now() - datetime.timedelta(days=days)).strftime('%Y%m%d%H%M%S')
     cursor = conn.cursor()
-    if talk_template is None:
-        talk_sql = ""
+    
+    sql_page_selects = []
+    
+    # If page_of_pages parameter is given, get the query for the list of linked pages; otherwise, get an empty placeholder query.
+    if page_of_pages:
+        list_of_pages = articles_from_list(site, page_of_pages, 4)
+        sql_page_selects.append(list_of_pages)
+    
+    # If talk_template parameter is given, get the query for the list of linked pages; otherwise, get an empty placeholder query.
+    if talk_template:
+        templated_pages = articles_from_talk_template(site, talk_template)
+        sql_page_selects.append(templated_pages)
+
+    if len(sql_page_selects)==0:
+        sql_join = ""
     else:
-        talk_sql = """
- inner join
-    (
-    select page_title as talk_title
-    from
-        templatelinks
-    inner join
-                page 
-        on 
-                page_id=tl_from and 
-                page_namespace=1 
-        where 
-                tl_title='%s' and
-                tl_namespace=10 and tl_from_namespace=1)
-                talkpagemed 
-        on 
-                rc_title=talk_title
-""" % talk_template
+        # If there are multiple selects for sets of page titles, we want to get the union of these selects.
+        union_of_lists = " UNION ".join(x for x in sql_page_selects)
+        pages = """
+        inner join
+            ( %s )
+            pages
+        on
+            rc_title=page_title
+            """ % union_of_lists
+
+    # Use the select for a set of pages to find changes to compose a query for changes to those pages
+    query = '''
+        select rc_this_oldid, rc_last_oldid, rc_title, rc_new_len-rc_old_len as diffSize
+        from
+            recentchanges
+        %s
+            left join
+                user_groups
+            on
+                rc_user=ug_user and
+                rc_type < 5 and
+                ug_group = 'bot'
+            where ug_group is NULL and
+                rc_namespace=%s and
+                rc_timestamp > %s and
+                rc_new_len-rc_old_len>500/* and
+                rc_comment not like '%%rollback%%'*/
+            order by  rc_new_len-rc_old_len desc
+        ''' % (pages, namespace, date_limit)
+
     ignore_summary = messages[site.lang]['ignore_summary'] if site.lang in messages else ''
-    print('''/* copyright */
-select rc_this_oldid, rc_last_oldid, rc_title, rc_new_len-rc_old_len as diffSize
-from
-    recentchanges
-%s
-    left join
-        user_groups
-    on
-        rc_user=ug_user and
-        rc_type < 5 and
-        ug_group = 'bot'
-    where ug_group is NULL and
-        rc_namespace=0 and
-        rc_timestamp > %s and
-        rc_new_len-rc_old_len>500 and
-        rc_comment not rlike '%s'
-    order by  rc_new_len-rc_old_len desc
-''' % (talk_sql, date_limit, ignore_summary.encode('utf-8')))
-    cursor.execute('''/* copyright */
-select rc_this_oldid, rc_last_oldid, rc_title, rc_new_len-rc_old_len as diffSize
-from
-    recentchanges
-%s
-    left join
-        user_groups
-    on
-        rc_user=ug_user and
-        rc_type < 5 and
-        ug_group = 'bot'
-    where ug_group is NULL and
-        rc_namespace=0 and
-        rc_timestamp > %s and
-        rc_new_len-rc_old_len>500/* and
-        rc_comment not like '%%rollback%%'*/
-    order by  rc_new_len-rc_old_len desc
-''' % (talk_sql, date_limit))
+    print(query)
+    
+    # Run the query
+    cursor.execute(query)
     changes = []
     for curid, prev_id, title, diffSize in cursor.fetchall():
         changes.append((pywikibot.Page(site, title.decode('utf-8')), curid, prev_id))
     pywikibot.output('Num changes: %i' % len(changes))
     return changes
-
 
 def parse_blacklist(page_name):
     """
@@ -498,17 +540,21 @@ def main(*args):
     """
     global ignore_sites, DEBUG_MODE
     report_page = None
-
-    report_page = None
     generator = None
+    talk_template = None
+    page_of_pages = None
+    days = None
+    namespace = 0
     genFactory = pagegenerators.GeneratorFactory()
 
     for arg in pywikibot.handleArgs(*args):
         site = pywikibot.Site()
         if arg.startswith('-talkTemplate:'):
-            generator = db_changes_generator(site, talk_template=arg[len("-talkTemplate:"):])
+            talk_template=arg[len("-talkTemplate:"):]
+        elif arg.startswith('-pagesLinkedFrom:'):
+            page_of_pages=arg[len("-pagesLinkedFrom:"):]
         elif arg.startswith('-recentchanges:'):
-            generator = db_changes_generator(site, days=float(arg[len("-recentchanges:"):]))
+            days=float(arg[len("-recentchanges:"):])
         elif arg.startswith('-api_recentchanges:'):
             source = RecentChangesPageGenerator(namespaces=[0], showBot=False,
                                                 total=int(arg[len("-api_recentchanges:"):]), changetype=['edit'],
@@ -527,12 +573,16 @@ def main(*args):
             gen = pagegenerators.PreloadingGenerator(gen)
             generator = [(p, p.latestRevision(), 0) for p in gen]
 
+    if (talk_template or page_of_pages or days):
+        if not days:
+            days = MAX_AGE
+        generator =  db_changes_generator(site, talk_template, page_of_pages, days, namespace)
+
     if generator is None:
         pywikibot.showHelp()
     else:
         bot = PlagiaBot(pywikibot.Site(), generator, report_page)
         bot.run()
-
 
 if __name__ == "__main__":
     try:
@@ -542,3 +592,4 @@ if __name__ == "__main__":
 
         traceback.print_exc()
         pywikibot.stopme()
+
