@@ -137,7 +137,7 @@ class PlagiaBot:
             print(submit_response)
             raise
 
-    def poll_response(self, upload_id, article_title, added_lines):
+    def poll_response(self, upload_id, article_title, added_lines, rev_id):
         global MIN_PERCENTAGE, DIFF_URL
         pywikibot.output("Polling iThenticate until document has been processed...", newline=False)
 
@@ -202,8 +202,9 @@ class PlagiaBot:
                     except:
                         num_sources += 1
                         pass
-                    report.append("* %s % 3i%% %i words at [%s %s] %s" % (
-                        source['collection'][0], source['percent'], source['word_count'], source['linkurl'], source['linkurl'][:100], hint_text))
+                    compare_link = '//tools.wmflabs.org/copyvios?lang={{subst:CONTENTLANG}}&project={{lc:{{ns:Project}}}}&title=&oldid='+str(rev_id)+'&action=compare&url='+source['linkurl']
+                    report.append("* %s % 3i%% %i words at [%s %s] ([%s Compare]) %s" % (
+                        source['collection'][0], source['percent'], source['word_count'], source['linkurl'], source['linkurl'][:100], compare_link, hint_text))
                     if num_sources == 3:
                         break
             report = '[%s report]\n'%DIFF_URL%part['id']+'\n'.join(report) if len(report)>0 else ''
@@ -353,7 +354,7 @@ class PlagiaBot:
                 pywikibot.output('Change is too small - skipping')
 
         pywikibot.output('Polling uploads')
-        reports_source = [{'source': self.poll_response(upload_id, rev_details['title'], added_lines),
+        reports_source = [{'source': self.poll_response(upload_id, rev_details['title'], added_lines, rev_details['new']),
                            'diffTemplate': local_messages['template-diff']} for rev_details, upload_id, added_lines in uploads]
 
         report_template = u"""
