@@ -387,6 +387,7 @@ class PlagiaBot:
             reports = u"""
 {| class="mw-datatable sortable" style="width: 90%%;margin:auto;"
 ! style="width:15%%" | %s !! style="width:10%%" | %s !! style="width:50px" | %s !! %s !! style="width:150px;" |%s
+|- valign="top"
 %s
 |}
 """ % (local_messages['table-title'], local_messages['table-diff'], local_messages['table-editor'],
@@ -573,7 +574,7 @@ def main(*args):
             gen = pagegenerators.PreloadingGenerator(gen)
             generator = [(p, p.latestRevision(), 0) for p in gen]
 
-    if (talk_template or page_of_pages or days):
+    if (not generator) and (talk_template or page_of_pages or days):
         if not days:
             days = MAX_AGE
         generator =  db_changes_generator(site, talk_template, page_of_pages, days, namespace)
