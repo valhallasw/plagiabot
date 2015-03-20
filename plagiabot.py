@@ -53,8 +53,8 @@ docuReplacements = {
 MIN_SIZE = 500  # minimum length of added text for sending to server
 MIN_PERCENTAGE = 50
 WORDS_QUOTE = 50
-MAX_AGE = 1 # how many days worth of recent changes to check
-DIFF_URL = '//tools.wmflabs.org/plaigsossbot/ithenticate.py?rid=%s'
+MAX_AGE = 1  # how many days worth of recent changes to check
+DIFF_URL = '//tools.wmflabs.org/eranbot/ithenticate.py?rid=%s'
 messages = {
     'en': {
         'table-title': 'Title',
@@ -374,14 +374,14 @@ class PlagiaBot:
         reports_details = [dict(details[0].items() + source.items()) for details, source in zip(uploads, reports_source)
                            if len(source['source']) > 0]
         reports_details = [report_template.format(**rep) for rep in reports_details]
-
+        seperator = '\n{{plagiabot row'#'\n|- valign="top"\n'
         if len(reports_details) > 0:
             if self.report_page is None:
                 orig_report = [""]
             else:
                 try:
                     orig_report = self.report_page.get()
-                    orig_report = orig_report.split('\n|- valign="top"\n', 1)
+                    orig_report = orig_report.split(seperator, 1)
                 except:
                     orig_report = [""]
             reports = u"""
@@ -394,7 +394,7 @@ class PlagiaBot:
        local_messages['table-source'], local_messages['table-status'], ''.join(reports_details))
 
             if len(orig_report) == 2:
-                reports = orig_report[0] + ''.join(reports_details) +'\n|- valign="top"\n'+ orig_report[1]
+                reports = orig_report[0] + ''.join(reports_details) + seperator + orig_report[1]
             else:
                 reports = orig_report[0] + reports
 
@@ -477,7 +477,7 @@ def db_changes_generator(site, talk_template=None, page_of_pages=None, days=1, n
     else:
         # If there are multiple selects for sets of page titles, we want to get the union of these selects.
         union_of_lists = " UNION ".join(x for x in sql_page_selects)
-        pages = """
+        sql_join = """
         inner join
             ( %s )
             pages
@@ -503,7 +503,7 @@ def db_changes_generator(site, talk_template=None, page_of_pages=None, days=1, n
                 rc_new_len-rc_old_len>500/* and
                 rc_comment not like '%%rollback%%'*/
             order by  rc_new_len-rc_old_len desc
-        ''' % (pages, namespace, date_limit)
+        ''' % (sql_join, namespace, date_limit)
 
     ignore_summary = messages[site.lang]['ignore_summary'] if site.lang in messages else ''
     print(query)
@@ -548,7 +548,7 @@ def main(*args):
     namespace = 0
     genFactory = pagegenerators.GeneratorFactory()
 
-    for arg in pywikibot.handleArgs(*args):
+    for arg in pywikibot.handle_args(args):
         site = pywikibot.Site()
         if arg.startswith('-talkTemplate:'):
             talk_template=arg[len("-talkTemplate:"):]
