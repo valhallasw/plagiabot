@@ -572,7 +572,7 @@ def main(*args):
             # general page generators for checking the latest revision
             gen = genFactory.getCombinedGenerator()
             gen = pagegenerators.PreloadingGenerator(gen)
-            generator = [(p, p.latestRevision(), 0) for p in gen]
+            generator = [(p, p.latestRevision(), 0) for p in gen if p.exists()]
 
     if (not generator) and (talk_template or page_of_pages or days):
         if not days:
