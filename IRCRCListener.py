@@ -35,7 +35,9 @@ class IRCRecentChangesBot(IRCBot):
         except UnicodeDecodeError:
             return
 
-        name = msg[8:msg.find(u'\x0314', 9)]
+        page_title_end = msg.find(u'\x0314', 9)
+        if page_title_end == -1: return
+        name = msg[8:page_title_end]
         page = pywikibot.Page(self.site, name)
 
         is_new = 'N' in match.group('flags')
@@ -61,8 +63,12 @@ class IRCRecentChangesBot(IRCBot):
         page._rcinfo = diff_data
 
         # use of generator rather than simple if allow easy use of pagegenerators
-        for filtered_page in self.filter_generator([page]):
-            self.queue.put(filtered_page)
+        try:
+            for filtered_page in self.filter_generator([page]):
+                self.queue.put(filtered_page)
+        except:
+            # whatever reason the filter fail we can ignore it
+            pass
 
 class IRCRcBotThread(threading.Thread):
     def __init__(self, site, channel, nickname, server, filter_generator=None):
