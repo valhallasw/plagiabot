@@ -694,7 +694,7 @@ def main(*args):
         elif arg.startswith('-recentchanges:'):
             days=float(arg[len("-recentchanges:"):])
         elif arg.startswith('-api_recentchanges:'):
-            source = RecentChangesPageGenerator(namespaces=[0], showBot=False,
+            source = pagegenerators.RecentChangesPageGenerator(namespaces=[0], showBot=False,
                                                 total=int(arg[len("-api_recentchanges:"):]), changetype=['edit'],
                                                 showRedirects=False)
             generator = [(p, p.latestRevision(), p.previousRevision()) for p in source]
