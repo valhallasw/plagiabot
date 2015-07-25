@@ -425,7 +425,7 @@ class PlagiaBot(object):
             report['tags'] = get_page_tags(self.site, report['title'])
 
         for rep in reports_details:
-            self.report_log.add_report(rep['new'], rep['title_no_ns'], rep['ns'], rep['report_id'], rep['source'])
+            self.report_log.add_report(rep['new'], rep['diff_date'], rep['title_no_ns'], rep['ns'], rep['report_id'], rep['source'])
         reports_details = [report_template.format(**rep) for rep in reports_details]
 
         seperator = '\n{{plagiabot row'#'\n|- valign="top"\n'
@@ -457,7 +457,7 @@ class PlagiaBot(object):
                 try:
                     self.report_page.put(reports, "Update")
                 except pywikibot.SpamfilterError:
-                    print('spam filter error')
+                    pywikibot.output('spam filter error')
                     pass
         else:
             pywikibot.output('No violation found!')
@@ -615,7 +615,7 @@ def db_changes_generator(site, talk_template=None, page_of_pages=None, days=1, n
             """ % union_of_lists
 
     # Use the select for a set of pages to find changes to compose a query for changes to those pages
-    ignore_summary = messages[site.lang]['ignore_summary'] if site.lang in messages else ''
+    ignore_summary = messages[site.lang]['ignore_summary'] if site.lang in messages else messages['en']['ignore_summary']
     ignore_summary = ignore_summary.replace('\\','\\\\').encode('utf8')
     query = '''
 /* plagiabot */

@@ -18,7 +18,7 @@ class ReportLogger(object):
     def __init__(self, site=None):
         pass
 
-    def add_report(self, diff, page_title, page_ns, ithenticate_id, report):
+    def add_report(self, diff, diff_ts, page_title, page_ns, ithenticate_id, report):
         pass
 
 class DbReportLogger(ReportLogger):
@@ -38,17 +38,17 @@ class DbReportLogger(ReportLogger):
                            read_default_file=config.db_connect_file)
         self.cursor = self.conn.cursor()
  
-    def add_report(self, diff, page_title, page_ns, ithenticate_id, report):
+    def add_report(self, diff, diff_ts, page_title, page_ns, ithenticate_id, report):
         global _qmark
         if self.conn is None:
             self.connect()
-
+        diff_ts = diff_ts.totimestampformat()  # use MW format 
         try:
-            print((self.project, self.lang, diff, page_title, page_ns, ithenticate_id, report))
-            insert_query = """INSERT INTO copyright_diffs (project, lang, diff, page_title, page_ns, ithenticate_id, report)
-            values ({}, {}, {}, {}, {}, {}, {} )
-            """.format(*[_qmark]*7)
-            self.cursor.execute(insert_query, (self.project, self.lang, diff, page_title, int(page_ns), ithenticate_id, report))
+            print((self.project, self.lang, diff, diff_ts, page_title, page_ns, ithenticate_id, report))
+            insert_query = """INSERT INTO copyright_diffs (project, lang, diff, diff_timestamp, page_title, page_ns, ithenticate_id, report)
+            values ({}, {}, {}, {}, {}, {}, {}, {} )
+            """.format(*[_qmark]*8)
+            self.cursor.execute(insert_query, (self.project, self.lang, diff, diff_ts, page_title, int(page_ns), ithenticate_id, report))
             self.conn.commit()
         except MySQLdb.OperationalError:
             self.connect()
