@@ -10,6 +10,7 @@ from pywikibot.botirc import IRCBot
 import threading
 import sys
 import re
+from datetime import datetime
 if sys.version_info[0] > 2:
     from queue import Queue, Empty
 else:
@@ -24,12 +25,12 @@ class IRCRecentChangesBot(IRCBot):
         if filter_generator is None:
             filter_generator = lambda x : x
         self.filter_generator  = filter_generator
-
+        self.last_msg = datetime.now() 
     def on_pubmsg(self, c, e):
         match = self.re_edit.match(e.arguments()[0])
         if not match:
             return
-
+        self.last_msg = datetime.now()
         try:
             msg = e.arguments()[0].decode('utf-8')
         except UnicodeDecodeError:
@@ -89,13 +90,28 @@ def irc_rc_listener(site, filter_gen=None):
     nickname = site.username()
     irc_thread =  IRCRcBotThread(site, channel, nickname, server, filter_gen)
     irc_thread.start()
+    restarts = 0
+    max_restarts = 5
     while True:
         try:
             element = irc_thread.irc_bot.queue.get(timeout=0.1)
         except Empty:
+            if (datetime.now()-irc_thread.irc_bot.last_msg).seconds > 60:
+                pywikibot.output('Missing updates for long time. Restarting....')
+                try:
+                    irc_thread.stop()
+                except:
+                    pass
+                if restarts > max_restarts:
+                    raise Exception('Too many restarts of IRC listner bot')
+                irc_thread =  IRCRcBotThread(site, channel, nickname, server, filter_gen)
+                irc_thread.start()
+                restarts += 1
+
             continue
         if element is None:
             return
+        restarts = 0
         yield element
 
 def main():
