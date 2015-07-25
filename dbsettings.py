@@ -6,5 +6,5 @@ host='%s.labsdb'
 connect_file='~/replica.my.cnf'
 
 # db host name for reporter
-reporter_db_host = 'tools-db'
+reporter_db_host = 'enwiki.labsdb'
 

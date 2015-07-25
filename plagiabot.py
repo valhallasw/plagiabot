@@ -406,8 +406,6 @@ class PlagiaBot(object):
         local_messages = messages[self.site.lang] if self.site.lang in messages else messages['en']
 
         pywikibot.output('Polling uploads')
-        #reports_source = [{'source': self.poll_response(upload_id, rev_details['title'], added_lines, rev_details['new']),
-        #                   'diffTemplate': local_messages['template-diff']} for rev_details, upload_id, added_lines in self.uploads]
         reports_source = [self.poll_response(upload_id, rev_details['title'], added_lines, rev_details['new']) for rev_details, upload_id, added_lines in self.uploads]
         reports_source = [{'report_id': report_id, 'source': report_source} for report_source, report_id in reports_source] 
         # Define the format of an individual report row.
@@ -452,7 +450,7 @@ class PlagiaBot(object):
                 reports = orig_report[0] + ''.join(reports_details) + seperator + orig_report[1]
             else:
                 reports = orig_report[0] + reports
-            pywikibot.output(reports)
+            pywikibot.output(''.join(reports_details))
             if self.report_page is not None:
                 try:
                     self.report_page.put(reports, "Update")
