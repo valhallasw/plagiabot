@@ -10,14 +10,37 @@ class csv_formatter(object):
         res = ''
         if self.headers is None:
             self.headers = [str(x) for x in row]
-            res = ','.join(self.headers) + '\n'
-        res += ','.join([str(row[h]) if h in row else '' for h in self.headers])
+            res = ','.join(self.headers)
+        res += '\n' + ','.join([str(row[h]) if h in row else '' for h in self.headers])
         return res
+
+    def open(self):
+        return [('Content-Type', 'text/plain; charset=UTF-8')]
+
+    def close(self):
+        return ''
+
+class json_formatter(object):
+    def __init__(self):
+        self.is_first = True
+
+    def __call__(self, row):
+        res = ',\n'
+        if self.is_first:
+            res  = '['
+            self.is_first = False
+        return res+str(row)
+
+    def open(self):
+        return [('Content-Type', 'text/javascript; charset=UTF-8')]
+
+    def close(self):
+        return '[]' if self.is_first else ']'
 
 def suspected_diffs(q):
     import oursql 
     import dbsettings
-    con = oursql.connect(host=dbsettings.reporter_db_host, db='{}__copyright'.format(dbsettings.db_username),
+    con = oursql.connect(host=dbsettings.reporter_db_host, db='{}__copyright_p'.format(dbsettings.db_username),
                           read_default_file=dbsettings.connect_file, use_unicode=True, charset='utf8')
     cursor = con.cursor()
     columns = ['project','lang','diff', 'diff_timestamp','page_title','page_ns']
@@ -54,29 +77,30 @@ def get_view_url(q):
        return ';('
 
 def app(environ, start_response):
-    start_response('200 OK', [('Content-Type', 'text/plain; charset=UTF-8')])
-    q=parse_qs(environ['QUERY_STRING'])
-    formatter = lambda x: str(x)
+    q = parse_qs(environ['QUERY_STRING'])
+    formatter = json_formatter()
     if 'format' in q:
         if q['format'][0] == 'json':
-            formatter = lambda x: str(x)
+            formatter = json_formatter()
         elif q['format'][0] == 'csv':
             formatter = csv_formatter()
         else:
+            start_response('200 OK', [('Content-Type', 'text/plain; charset=UTF-8')])
             yield 'Unkown format %s' %(str(q['format']))
             return
+    start_response('200 OK', formatter.open())
     valid_actions = ['suspected_diffs', 'get_view_url']
     if 'action' not in q or q['action'][0] not in valid_actions:
         yield 'Invalid action.\nMust be one of the following: ' + ', '.join(valid_actions)
         return
-
     action = q['action'][0]
     if action =='suspected_diffs':
         for diff in suspected_diffs(q):
             yield formatter(diff)
-            yield '\n'
     elif action == 'get_view_url':
-        yield get_view_url(q)
+        yield formatter(get_view_url(q))
+
+    yield formatter.close()
 
 WSGIServer(app).run()
 
