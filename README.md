@@ -1,5 +1,26 @@
 plagiabot
 =========
+Plagiabot is a copyright violation detection bot.
+
+Repository for Turntin-based plagiarism detection for Wikipedia. See https://en.wikipedia.org/wiki/Wikipedia:Turnitin for details.
+
+
+API
+----------------------------
+You can query suspected diffs using the API available in: http://tools.wmflabs.org/eranbot/plagiabot/api.py
+
+Examples:
+* http://tools.wmflabs.org/eranbot/plagiabot/api.py?action=suspected_diffs
+* http://tools.wmflabs.org/eranbot/plagiabot/api.py?action=suspected_diffs&format=csv
+* http://tools.wmflabs.org/eranbot/plagiabot/api.py?action=suspected_diffs&page_title=Rajesh_Khanna&report=1
+
+Running the bot
+----------------------------
+The bot support standard pywikibot page generators - for most of them it check the latest revision.
+The bot also supports speacial genertors to check specific edit based on the diff:
+* recentchanges (DB based)
+* recentchanges_api (api based)
+* live - recent changes using streaming
 
 ```
 valhallasw@lisilwen:~/src/plagiabot$ python -i plagiabot.py
@@ -25,8 +46,6 @@ Sources found were:
  * I  38% 26 words at http://lrd.yahooapis.com/_ylc=X3oDMTVnbm
 ```
 
-
-Repository for Turntin-based plagiarism detection for Wikipedia. See https://en.wikipedia.org/wiki/Wikipedia:Turnitin for details.
 
 
 Useful links:
