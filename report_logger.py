@@ -46,11 +46,10 @@ class DbReportLogger(ReportLogger):
         retries = 0
         while retries < 2: 
             try:
-                print((self.project, self.lang, diff, diff_ts, page_title, page_ns, ithenticate_id, report))
                 insert_query = """INSERT INTO copyright_diffs (project, lang, diff, diff_timestamp, page_title, page_ns, ithenticate_id, report)
                 values ({}, {}, {}, {}, {}, {}, {}, {} )
                 """.format(*[_qmark]*8)
-                self.cursor.execute(insert_query, (self.project, self.lang, diff, diff_ts, page_title, int(page_ns), ithenticate_id, report))
+                self.cursor.execute(insert_query, (self.project, self.lang, diff, diff_ts, page_title.replace(' ','_'), int(page_ns), ithenticate_id, report))
                 self.conn.commit()
                 break
             except MySQLdb.OperationalError:

@@ -43,7 +43,7 @@ def suspected_diffs(q):
     con = oursql.connect(host=dbsettings.reporter_db_host, db='{}__copyright_p'.format(dbsettings.db_username),
                           read_default_file=dbsettings.connect_file, use_unicode=True, charset='utf8')
     cursor = con.cursor()
-    columns = ['project','lang','diff', 'diff_timestamp','page_title','page_ns']
+    columns = ['project','lang','diff', 'diff_timestamp','page_title','page_ns', 'ithenticate_id']
 
     where_cols = []
     value_cols = []
@@ -51,11 +51,12 @@ def suspected_diffs(q):
         if col in q:
             where_cols.append(col)
             value_cols.append(q[col][0])
-
     where = ''
+    if 'report' in q:
+        columns.append('report')
     if len(where_cols):
         where = ' where ' + ' AND '.join([x+'= ?' for x in where_cols])
-    cursor.execute('select project, lang, diff, diff_timestamp, page_title, page_ns from copyright_diffs' + where + ' order by diff_timestamp desc limit 50', value_cols)
+    cursor.execute('select '+', '.join(columns) +' from copyright_diffs' + where + ' order by diff_timestamp desc limit 50', value_cols)
     for data in cursor:
         yield dict((col, str(data[i])) for i, col in enumerate(columns) if col not in where_cols)
 
