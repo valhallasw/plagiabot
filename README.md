@@ -17,11 +17,12 @@ Examples:
 Running the bot
 ----------------------------
 The bot support standard pywikibot page generators - for most of them it check the latest revision.
-The bot also supports speacial genertors to check specific edit based on the diff:
+The bot also supports special generators to check specific edit based on the diff:
 * recentchanges (DB based)
 * recentchanges_api (api based)
 * live - recent changes using streaming
 
+See command line help for more details
 ```
 valhallasw@lisilwen:~/src/plagiabot$ python -i plagiabot.py
 Logging in...
