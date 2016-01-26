@@ -1,6 +1,5 @@
 from plagiabot_config import ithenticate_user, ithenticate_password
 from flup.server.fcgi import WSGIServer
-
 from cgi import parse_qs, escape
 
 class csv_formatter(object):
@@ -50,7 +49,7 @@ def suspected_diffs(q):
     for col in columns:
         if col in q:
             where_cols.append(col)
-            value_cols.append(q[col][0])
+            value_cols.append(q[col][0].decode('utf8'))
     where = ''
     if 'report' in q:
         columns.append('report')
@@ -96,8 +95,11 @@ def app(environ, start_response):
         return
     action = q['action'][0]
     if action =='suspected_diffs':
-        for diff in suspected_diffs(q):
-            yield formatter(diff)
+        try:
+            for diff in suspected_diffs(q):
+                yield formatter(diff)
+        except:
+            yield 'Error encountered while handling the request. Please report a bug: https://github.com/valhallasw/plagiabot/issues\n'
     elif action == 'get_view_url':
         yield formatter(get_view_url(q))
 
