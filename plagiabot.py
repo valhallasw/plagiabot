@@ -170,7 +170,8 @@ class PlagiaBot(object):
 
         for rev_details, upload_id, added_lines in self.uploads[::-1]:
             document_get_response = self.server.document.get({'id': upload_id, 'sid': self.sid})
-            assert (document_get_response['status'] == 200)
+            if (document_get_response['status'] != 200):
+                raise Exception('Error retreving document {}'.format(upload_id))
             document = document_get_response['documents'][0]
             pending = document['is_pending']
             if pending:
@@ -205,14 +206,16 @@ class PlagiaBot(object):
             report_sources_response = self.server.report.sources({'id': part['id'], 'sid': self.sid})
             assert (report_sources_response['status'] == 200)
 
-            pywikibot.output("Sources found...")
             report = []
             sources = [cp_source for cp_source in report_sources_response['sources'] if
                        'linkurl' in cp_source and not any([ig.search(cp_source['linkurl']) for ig in ignore_sites])]
             num_sources = 0
+            pywikibot.output("%i non ignore sites found" % (len(sources)))
             for source in sources:
+                pywikibot.output(source['linkurl'])
                 if int(source['percent']) < MIN_PERCENTAGE:
-                    break
+                    # pywikibot.output('Not enough similarity '+ str(source['percent']))
+                    continue
                 
                 hint_text = ''
                 try:
@@ -222,7 +225,7 @@ class PlagiaBot(object):
                         req_source = requests.get(source['linkurl'])
                         if req_source.status_code == 200:
                             title_encode = urllib.quote(article_title)
-                            mirror_re = re.compile('(wikipedia.org/w(iki/|/index.php\?title=)(%s|%s)|material from the Wikipedia article|From Wikipedia|source: wikipedia.org)' % (
+                            mirror_re = re.compile('(wikipedia.org/w(iki/|/index.php\?title=)(%s|%s)|material from the Wikipedia article|From Wikipedia|source: wikipedia)' % (
                                 re.sub('[ _]', '[ _]', re.escape(article_title)), title_encode), re.I)
                             if any(mirror_re.findall(req_source.text)):
                                 hint_text = '<span class="success">Mirror?</span>'
@@ -238,14 +241,17 @@ class PlagiaBot(object):
                                     (re.search('<html', req_source.text, re.I) and
                                         len(re.findall('<a [^>]*>', req_source.text, re.I)) < 10):
                                 hint_text = '<span class="error">Low quality site</span>'
+                                pywikibot.output('Low quality site')
                                 continue  #  low quality sites
                         elif req_source.status_code in [403,404, 500]:
                             continue  # low quality source - ignore
                     num_sources += 1
                 except requests.exceptions.ConnectionError:
                     hint_text = '<span class="error">connection error</span>'
+                    pywikibot.output('Connection error to site')
                     continue  # we trust it enough by now to just skip those results
-                except:
+                except Exception as e:
+                    pywikibot.output('Err ' + e.message)
                     num_sources += 1
                     pass
                 compare_link = '//tools.wmflabs.org/copyvios?lang={{subst:CONTENTLANG}}&project={{lc:{{ns:Project}}}}&title=&oldid='+str(rev_id)+'&action=compare&url='+source['linkurl']
@@ -254,13 +260,15 @@ class PlagiaBot(object):
                 if num_sources == 3:
                         break
             report = '<div class="mw-ui-button">[%s report]</div>\n'%DIFF_URL%part['id']+'\n'.join(report) if len(report)>0 else ''
+            pywikibot.output(report)
             return report, part['id']
 
     def remove_wikitext(self, text):
         # clean some html/wikitext from the text before sending to server...
         # you may use mwparserfromhell to get cleaner text (but this requires dependency...)
         global WORDS_QUOTE
-        #remove refs
+        #remove refis
+        if text is None or len(text) == 0: return ''
         refs = re.findall('<ref(?: .+?)?>(.*?)</ref>', text)
         for ref in refs:
             if ref.count(' ') < WORDS_QUOTE:
@@ -269,7 +277,17 @@ class PlagiaBot(object):
         clean_text  =re.sub("\[\[Category:.+?\]\]", "", clean_text)  # categories
         clean_text = re.sub("\[\[[^\[\]]+\|([^\[\]]+)\]\]", "\\1", clean_text)  # [[link|textlink]]
         clean_text = re.sub("\[\[(.+?)\]\]", "\\1", clean_text)  # [[links]]
+        clean_text = re.sub("\n(==+)\s*([^=]+)\s*\\1","\n\\2", clean_text) # remove == from titles
+        clean_text = re.sub("'''([^']+)'''","\\1", clean_text) # remove ''' bold
+        clean_text = re.sub("''([^']+)''","\\1", clean_text) # remove '' italics
         clean_text = re.sub("(align|class|style)\s*=\s*(\".+?\"|[^\"].+? )", "", clean_text)  # common in wikitables (align|class|style) etc
+        clean_text = re.sub("\n\\|-.{0,20}","", clean_text) # clean wikitables new lines
+        clean_text = re.sub("(\n\\|}|\n\\{\\| *[^\n]*)","", clean_text) # clean open/end of wikitables
+        clean_text = re.sub("\n![^\\|]+\\|","\n", clean_text) # clean table headers
+        clean_text = re.sub("\s*\\| *\w+ *= *(\"?#?[A-Za-z0-9]+\"?|\n)","", clean_text) # clean technical definitions (in templates and tables)
+        clean_text = re.sub("(?:\\| *)+","|", clean_text) # compact
+        clean_text = re.sub("\\n\\| *","\\n", clean_text) # trim |
+        clean_text = re.sub("(File|Image):[^\\.]+?\\.(jpg|png|pdf|svg)","", clean_text, re.I) # file names
 
         orig = clean_text
         same = False
@@ -278,6 +296,7 @@ class PlagiaBot(object):
             same = clean_text == orig
             orig = clean_text
         clean_text = re.sub("\[https?:.*?\]", "", clean_text)  # external links
+
         return clean_text
 
     def was_rolledback(self, page, new_rev, added_lines):
@@ -323,7 +342,7 @@ class PlagiaBot(object):
             return content
 
         # moved content indicated from the comment itself
-        possible_articles = re.findall('\[\[(.*?)\]\]', comment)
+        possible_articles = re.findall('\[\[(.+?)\]\]', comment)
         for pos_article in possible_articles:
             pos_page = pywikibot.Page(self.site, pos_article)
             try:
@@ -356,22 +375,36 @@ class PlagiaBot(object):
                 # skip edits with specific comments
                 if ignore_regex.match(comment):
                     continue
-            except:
-                pywikibot.output("Error occurred - skipping")
+            except Exception as e:
+                pywikibot.output("Error occurred - skipping: %s" % e.message)
                 continue
 
             diffy = difflib.SequenceMatcher()
             diffy.set_seqs(old, new)
             diff = [''.join(new[after_start:after_end]) for opcode, before_start, before_end, after_start, after_end in
                     diffy.get_opcodes() if opcode in ['insert']]
-            diff = [new_t for new_t in u'\n'.join(diff).split(u'\n') if new_t not in old] # remove text appeared in original
+            diff = [new_t for new_t in u'\n'.join(diff).split(u'\n') if new_t not in old and ' ' in new_t] # remove text appeared in original or very small addition
+            # avoid reoccurence
+            added_set = set()
+            diff_clean = []
+            for new in diff:
+                if new in added_set: continue
+                diff_clean.append(new)
+                added_set.add(new)
+            diff = diff_clean
+
+            # remove list of facts
+            diff = [line for line in diff if not re.match('^(\S+(\s|$)){1,4}$', line.strip('* |'))]
 
             # clean some html/wikitext from the text before sending to server...
             # you may use mwparserfromhell to get cleaner text (but this requires dependency...)
             added_lines = pywikibot.textlib.removeHTMLParts(u'\n'.join(diff), keeptags=[])
+
+            #pywikibot.output(added_lines)
             if len(added_lines) < MIN_SIZE:
                 pywikibot.output('\tDelta too small (after removing HTML)')
                 continue
+
             # remove moved content (also avoids mirrors)
             added_lines = self.remove_moved_content(p, prev_rev, added_lines, comment) 
 
@@ -426,39 +459,51 @@ class PlagiaBot(object):
             self.report_log.add_report(rep['new'], rep['diff_date'], rep['title_no_ns'], rep['ns'], rep['report_id'], rep['source'])
         reports_details = [report_template.format(**rep) for rep in reports_details]
 
+        if len(reports_details) == 0:
+            pywikibot.output('No violation found!')
+            return 
+        print('{} violations found'.format(len(reports_details)))
         seperator = '\n{{plagiabot row'#'\n|- valign="top"\n'
-        if len(reports_details) > 0:
-            print('{} violations found'.format(len(reports_details)))
-            if self.report_page is None:
+        if self.report_page is None:
+            orig_report = [""]
+        else:
+            try:
+                orig_report = self.report_page.get(force=True)
+                orig_report = orig_report.split(seperator, 1)
+            except:
                 orig_report = [""]
-            else:
-                try:
-                    orig_report = self.report_page.get(force=True)
-                    orig_report = orig_report.split(seperator, 1)
-                except:
-                    orig_report = [""]
-            reports = u"""
+        reports = u"""
 {| class="mw-datatable sortable" style="width: 90%%;margin:auto;"
 ! style="width:15%%" | %s !! style="width:10%%" | %s !! style="width:50px" | %s !! %s !! style="width:150px;" |%s
 |- valign="top"
 %s
 |}
 """ % (local_messages['table-title'], local_messages['table-diff'], local_messages['table-editor'],
-       local_messages['table-source'], local_messages['table-status'], ''.join(reports_details))
+   local_messages['table-source'], local_messages['table-status'], ''.join(reports_details))
 
-            if len(orig_report) == 2:
-                reports = orig_report[0] + ''.join(reports_details) + seperator + orig_report[1]
-            else:
-                reports = orig_report[0] + reports
-            pywikibot.output(''.join(reports_details))
-            if self.report_page is not None:
-                try:
-                    self.report_page.put(reports, "Update")
-                except pywikibot.SpamfilterError:
-                    pywikibot.output('spam filter error')
-                    pass
+        pywikibot.output(''.join(reports_details))
+        if len(orig_report) == 2:
+            reports = orig_report[0] + ''.join(reports_details) + seperator + orig_report[1]
         else:
-            pywikibot.output('No violation found!')
+            reports = orig_report[0] + reports
+        # save to report page is specified
+        if self.report_page is None:
+            return
+        try_save = True
+        while try_save:
+            try:
+                try_save = False
+                self.report_page.put(reports, "Update")
+            except pywikibot.SpamfilterError:
+                pywikibot.output('spam filter error')
+            except pywikibot.EditConflict:
+                try_save = True
+                orig_report = self.report_page.get(force=True)
+                orig_report = orig_report.split(seperator, 1)
+                if len(orig_report) == 2:
+                    reports = orig_report[0] + ''.join(reports_details) + seperator + orig_report[1]
+                else:
+                    reports = orig_report[0] + reports
 
 
     def run(self): 
@@ -466,12 +511,13 @@ class PlagiaBot(object):
         self.report_uploads()
 
 class PlagiaBotLive(PlagiaBot):
-    def __init__(self, site, report_page=None, use_stream=False, report_log=report_logger.ReportLogger()):
+    def __init__(self, site, report_page=None, use_stream=False, report_log=report_logger.ReportLogger(), run_timeout = 14400):
         super(PlagiaBotLive, self).__init__(site, [], report_page, report_log)
         self.rcthreshold = 10
         self.use_stream = use_stream
         local_messages = messages[self.site.lang] if self.site.lang in messages else messages['en']
         self.ignore_regex = re.compile(local_messages['ignore_summary'], re.I)
+        self.end_time = datetime.datetime.now() + datetime.timedelta(0, run_timeout)
 
     def page_filter(self, page):
         global wikiEd_pages
@@ -487,7 +533,6 @@ class PlagiaBotLive(PlagiaBot):
             diff_size = rcinfo['diff_bytes']
         if diff_size < MIN_SIZE: return False  # skip small/minor changes
         if self.ignore_regex.match(rcinfo['comment']): return False  # skip rollbacks
-        
         return True
    
     def run(self):
@@ -502,14 +547,16 @@ class PlagiaBotLive(PlagiaBot):
             from IRCRCListener import irc_rc_listener
             live_gen = (p for p in irc_rc_listener(self.site, filter_gen))
         pending_checks = []
-        reconnect_index = 500
+        reconnect_index = 100
         try:
             for page in live_gen:
                 rcinfo = page._rcinfo
                 #log('Adding page:' + page.title())
                 # TODO: remove rolledback edits from generator
-                log('Page in buffer: {}'.format(len(pending_checks)))
+                pywikibot.output('Page in buffer: {}'.format(len(pending_checks)))
                 pending_checks.append((page, rcinfo['revision']['new'], rcinfo['revision']['old'] or 0))
+                if self.end_time < datetime.datetime.now():
+                    raise KeyboardInterrupt
                 if len(pending_checks) < self.rcthreshold or not self.uploads_ready(): continue # move to next edit if not enough edits accomulated
                 # handle uploads or send new changes to process
                 if len(self.uploads) > 0:
@@ -521,7 +568,7 @@ class PlagiaBotLive(PlagiaBot):
                     if reconnect_index == 0:
                         pywikibot.output('Reconnect after many uploads' )
                         self._init_server()
-                        reconnect_index = 500
+                        reconnect_index = 100
                 else:
                     pywikibot.output('checking pending')
                     self.generator = pending_checks
@@ -534,6 +581,7 @@ class PlagiaBotLive(PlagiaBot):
             # handle uploads or send new changes to process
             if len(self.uploads) > 0:
                 self.report_uploads()  # report checked edits
+                raise
  
 def articles_from_talk_template(talk_template):
     """
