@@ -415,7 +415,7 @@ class PlagiaBot(object):
                 if quote.count(' ') < WORDS_QUOTE:
                     added_lines = added_lines.replace(quote, '')
 
-            if len(added_lines) > MIN_SIZE and (prev_rev==0 or not self.was_rolledback(p, new_rev, added_lines)):
+            if len(added_lines) > MIN_SIZE and (prev_rev==0 or not self.was_rolledback(p, new_rev, added_lines) and len(re.split('\s', added_lines)) > 20):
                 if DEBUG_MODE: # dont upload to server in debug mode
                     continue
                 try:
