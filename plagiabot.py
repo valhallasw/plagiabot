@@ -88,7 +88,18 @@ messages = {
         'update-summary': u'עדכון',
         'ignore_summary': u'(שוחזר מעריכות של|ביטול גרסה|שחזור עריכות)',
         'rollback_of_summary': u'שוחזר מעריכ(ה|ות) של (\[\[User:|\[\[משתמש:)?{0}|ביטול גרסה {1}'
-   }
+   },
+   'fr': {
+        'table-title': 'Titre',
+        'table-editor': 'Editeur',
+        'table-diff': 'Diff',
+        'table-status': 'Status',
+        'template-diff': u'diff',
+        'table-source': 'Source',
+        'update-summary': 'Bot: Mise à jour',
+        'ignore_summary': '\[*(Annulation|R[ée]vocation|Vandalisme|Retour|revert|rv$)',
+        'rollback_of_summary': '(Annulation|R[ée]vocation|Vandalisme|Retour).*?éditions? .*?par (\[\[(User|Utilisateur|Contributions):)?{0}|Annulation de l\'édition {1}|[[WP:FOI|bonne foi]] de (\[\[(User|Utilisateur|Contributions):)?{0}'
+    }
 }
 DEBUG_MODE = False
 ignore_sites = [re.compile('\.wikipedia\.org'), re.compile('he-free.info'),
