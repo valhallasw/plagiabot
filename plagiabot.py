@@ -100,6 +100,7 @@ messages = {
         'ignore_summary': '\[*(Annulation|R[ée]vocation|Vandalisme|Retour|revert|rv$)',
         'rollback_of_summary': '(Annulation|R[ée]vocation|Vandalisme|Retour).*?éditions? .*?par (\[\[(User|Utilisateur|Contributions):)?{0}|Annulation de l\'édition {1}|[[WP:FOI|bonne foi]] de (\[\[(User|Utilisateur|Contributions):)?{0}'
     }
+}
 DEBUG_MODE = False
 ignore_sites = [re.compile('\.wikipedia\.org'), re.compile('he-free.info'),
                 re.compile('lrd.yahooapis.com')]
