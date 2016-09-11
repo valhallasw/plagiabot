@@ -28,6 +28,7 @@ class IRCRecentChangesBot(IRCBot):
         self.last_msg = datetime.now() 
     def on_pubmsg(self, c, e):
         match = self.re_edit.match(e.arguments()[0])
+
         if not match:
             return
         self.last_msg = datetime.now()
@@ -62,14 +63,13 @@ class IRCRecentChangesBot(IRCBot):
             'bot': 'B' in match.group('flags')
         }
         page._rcinfo = diff_data
-
         # use of generator rather than simple if allow easy use of pagegenerators
         try:
             for filtered_page in self.filter_generator([page]):
                 self.queue.put(filtered_page)
-        except:
+        except Exception as e:
             # whatever reason the filter fail we can ignore it
-            pass
+            pywikibot.output('Skiping due to error: %s (%s)'% (e.message, str((type(e))) ))
 
 class IRCRcBotThread(threading.Thread):
     def __init__(self, site, channel, nickname, server, filter_generator=None):
@@ -92,12 +92,13 @@ def irc_rc_listener(site, filter_gen=None):
     irc_thread.start()
     restarts = 0
     max_restarts = 5
-    while True:
+    last_non_empty = datetime.now()
+    while irc_thread.is_alive():
         try:
-            element = irc_thread.irc_bot.queue.get(timeout=0.1)
+            element = irc_thread.irc_bot.queue.get(timeout=0.5)
         except Empty:
-            if (datetime.now()-irc_thread.irc_bot.last_msg).seconds > 60:
-                pywikibot.output('Missing updates for long time. Restarting....')
+            if (datetime.now()-irc_thread.irc_bot.last_msg).seconds > 180 or (datetime.now() - last_non_empty).seconds > 180*10:
+                pywikibot.output('Missing updates for long time (Now:{}, last: {}). Restarting....'.format(datetime.now(), irc_thread.irc_bot.last_msg))
                 try:
                     irc_thread.stop()
                 except:
@@ -106,12 +107,15 @@ def irc_rc_listener(site, filter_gen=None):
                     raise Exception('Too many restarts of IRC listner bot')
                 irc_thread =  IRCRcBotThread(site, channel, nickname, server, filter_gen)
                 irc_thread.start()
+                last_non_empty = datetime.now()
                 restarts += 1
 
             continue
         if element is None:
             return
         restarts = 0
+        last_non_empty = datetime.now()
+        pywikibot.output('yield element')
         yield element
 
 def main():

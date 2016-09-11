@@ -196,7 +196,9 @@ class PlagiaBot(object):
             pywikibot.output('.', newline=False)
             time.sleep(5)
         pywikibot.output('.')
-
+        if 'parts' not in document:
+            pywikibot.output('Error getting parts of document. Rev id: ' + str(rev_id))
+            return '', 0
         for part in document['parts']:
             # not sure if there is always a single part, so looping over it instead.
             pywikibot.output("Part #%i has a %i%% match. Getting details..." % (part['id'], part['score']))
@@ -496,6 +498,8 @@ class PlagiaBot(object):
                 self.report_page.put(reports, "Update")
             except pywikibot.SpamfilterError:
                 pywikibot.output('spam filter error')
+            except PageSaveRelatedError:
+                pywikibot.output('page save related error')
             except pywikibot.EditConflict:
                 try_save = True
                 orig_report = self.report_page.get(force=True)
@@ -524,7 +528,7 @@ class PlagiaBotLive(PlagiaBot):
         rcinfo = page._rcinfo
         if rcinfo['type'] != 'edit': return False  # only edits
         if rcinfo['bot']: return False # skip bot edits
-        if rcinfo['namespace'] != 0 and page.title() not in wikiEd_pages: return False  # only articles
+        if (rcinfo['namespace'] not in [0, 118]) and page.title() not in wikiEd_pages: return False  # only articles+drafts
         if 'length' in rcinfo:
             new_size = rcinfo['length']['new']
             old_size = rcinfo['length']['old'] or 0

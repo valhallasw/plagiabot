@@ -41,7 +41,7 @@ class DbReportLogger(ReportLogger):
     def add_report(self, diff, diff_ts, page_title, page_ns, ithenticate_id, report):
         global _qmark
         if self.conn is None:
-            self.connect()
+            self.connect()  # TODO: handle InterfaceError: Can't connect to MySQL server...?
         diff_ts = diff_ts.totimestampformat()  # use MW format
         retries = 0
         while retries < 2: 
@@ -55,4 +55,5 @@ class DbReportLogger(ReportLogger):
             except MySQLdb.OperationalError:
                 self.connect()
                 retries += 1
-
+            except MySQLdb.IntegrityError:
+                break
