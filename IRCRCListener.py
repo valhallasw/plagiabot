@@ -25,7 +25,7 @@ class IRCRecentChangesBot(IRCBot):
         if filter_generator is None:
             filter_generator = lambda x : x
         self.filter_generator  = filter_generator
-        self.last_msg = datetime.now() 
+        self.last_msg = datetime.now()
     def on_pubmsg(self, c, e):
         match = self.re_edit.match(e.arguments()[0])
         if not match:
@@ -87,7 +87,10 @@ class IRCRcBotThread(threading.Thread):
 def irc_rc_listener(site, filter_gen=None):
     channel = '#{}.{}'.format(site.lang, site.family.name)
     server = 'irc.wikimedia.org'
-    nickname = site.username()
+    if site.username():
+        nickname = site.username()
+    else:
+        nickname = 'Eranbot'
     irc_thread =  IRCRcBotThread(site, channel, nickname, server, filter_gen)
     irc_thread.start()
     restarts = 0
