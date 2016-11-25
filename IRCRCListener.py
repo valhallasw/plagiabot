@@ -25,7 +25,7 @@ class IRCRecentChangesBot(IRCBot):
         if filter_generator is None:
             filter_generator = lambda x : x
         self.filter_generator  = filter_generator
-        self.last_msg = datetime.now() 
+        self.last_msg = datetime.now()
     def on_pubmsg(self, c, e):
         match = self.re_edit.match(e.arguments()[0])
 
@@ -87,18 +87,21 @@ class IRCRcBotThread(threading.Thread):
 def irc_rc_listener(site, filter_gen=None):
     channel = '#{}.{}'.format(site.lang, site.family.name)
     server = 'irc.wikimedia.org'
-    nickname = site.username()
+    if site.username():
+        nickname = site.username()
+    else:
+        nickname = 'Eranbot'
     irc_thread =  IRCRcBotThread(site, channel, nickname, server, filter_gen)
     irc_thread.start()
     restarts = 0
     max_restarts = 5
     last_non_empty = datetime.now()
-    while irc_thread.is_alive():
+    while True:
         try:
-            element = irc_thread.irc_bot.queue.get(timeout=0.5)
+            element = irc_thread.irc_bot.queue.get(timeout=0.1)
         except Empty:
-            if (datetime.now()-irc_thread.irc_bot.last_msg).seconds > 180 or (datetime.now() - last_non_empty).seconds > 180*10:
-                pywikibot.output('Missing updates for long time (Now:{}, last: {}). Restarting....'.format(datetime.now(), irc_thread.irc_bot.last_msg))
+            if (datetime.now()-irc_thread.irc_bot.last_msg).seconds > 500:
+                pywikibot.output('Missing updates for long time. Restarting....')
                 try:
                     irc_thread.stop()
                 except:
