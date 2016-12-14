@@ -99,7 +99,19 @@ messages = {
         'update-summary': 'Bot: Mise à jour',
         'ignore_summary': '\[*(Annulation|R[ée]vocation|Vandalisme|Retour|revert|rv$)',
         'rollback_of_summary': '(Annulation|R[ée]vocation|Vandalisme|Retour).*?éditions? .*?par (\[\[(User|Utilisateur|Contributions):)?{0}|Annulation de l\'édition {1}|[[WP:FOI|bonne foi]] de (\[\[(User|Utilisateur|Contributions):)?{0}'
+    },
+    'pt': {
+        'table-title': 'Título',
+        'table-editor': 'Editor',
+        'table-diff': 'Diff',
+        'table-status': 'Status',
+        'template-diff': u'Diff',
+        'table-source': 'Fonte',
+        'update-summary': 'Atualização',
+        'ignore_summary': '\[*(Revertido|Revisão desfeita|rv$)',
+        'rollback_of_summary': 'Revertidas .*?edições? de (\[\[Usuário(a):)?{0}|Revisão desfeita {1}|Revertendo possível vandalismo de (\[\[Usuário(a):)?{0}'
     }
+
 }
 DEBUG_MODE = False
 ignore_sites = [re.compile('\.wikipedia\.org'), re.compile('he-free.info'),
@@ -213,11 +225,17 @@ class PlagiaBot(object):
         for part in document['parts']:
             # not sure if there is always a single part, so looping over it instead.
             pywikibot.output("Part #%i has a %i%% match. Getting details..." % (part['id'], part['score']))
-            report_get_response = self.server.report.get({'id': part['id'], 'sid': self.sid})
-            assert (report_get_response['status'] == 200)
-            pywikibot.output("Details are available on %s" % (report_get_response['report_url']))
-            report_sources_response = self.server.report.sources({'id': part['id'], 'sid': self.sid})
-            assert (report_sources_response['status'] == 200)
+
+            try:
+                report_get_response = self.server.report.get({'id': part['id'], 'sid': self.sid})
+                assert (report_get_response['status'] == 200)
+                pywikibot.output("Details are available on %s" % (report_get_response['report_url']))
+                report_sources_response = self.server.report.sources({'id': part['id'], 'sid': self.sid})
+                assert (report_sources_response['status'] == 200)
+            except Exception as e:
+                # silently drop this entry
+                pywikibot.output('Err ' + e.message)
+                return '', 0
 
             report = []
             sources = [cp_source for cp_source in report_sources_response['sources'] if
