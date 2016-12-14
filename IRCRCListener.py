@@ -99,7 +99,7 @@ def irc_rc_listener(site, filter_gen=None):
         try:
             element = irc_thread.irc_bot.queue.get(timeout=0.1)
         except Empty:
-            if (datetime.now()-irc_thread.irc_bot.last_msg).seconds > 500:
+            if (datetime.now()-irc_thread.irc_bot.last_msg).seconds > 1000:
                 pywikibot.output('Missing updates for long time. Restarting....')
                 try:
                     irc_thread.stop()
