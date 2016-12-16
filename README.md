@@ -4,16 +4,6 @@ Plagiabot is a copyright violation detection bot.
 
 Repository for Turntin-based plagiarism detection for Wikipedia. See https://en.wikipedia.org/wiki/Wikipedia:Turnitin for details.
 
-
-API
-----------------------------
-You can query suspected diffs using the API available in: http://tools.wmflabs.org/eranbot/plagiabot/api.py
-
-Examples:
-* http://tools.wmflabs.org/eranbot/plagiabot/api.py?action=suspected_diffs
-* http://tools.wmflabs.org/eranbot/plagiabot/api.py?action=suspected_diffs&format=csv
-* http://tools.wmflabs.org/eranbot/plagiabot/api.py?action=suspected_diffs&page_title=Rajesh_Khanna&report=1
-
 Running the bot
 ----------------------------
 The bot support standard pywikibot page generators - for most of them it check the latest revision.
@@ -47,17 +37,34 @@ Sources found were:
  * I  38% 26 words at http://lrd.yahooapis.com/_ylc=X3oDMTVnbm
 ```
 
+API
+----------------------------
+You can query suspected diffs using the API available in: http://tools.wmflabs.org/eranbot/plagiabot/api.py
 
+Examples:
+* http://tools.wmflabs.org/eranbot/plagiabot/api.py?action=suspected_diffs
+* http://tools.wmflabs.org/eranbot/plagiabot/api.py?action=suspected_diffs&format=csv
+* http://tools.wmflabs.org/eranbot/plagiabot/api.py?action=suspected_diffs&page_title=Rajesh_Khanna&report=1
+
+
+i18n
+----------------------------
+The bot supports English, French, Portuguese and Hebrew.
+
+For running the bot on new languages:
+1. Make sure ithenticate backend index pages in the desired language: http://www.ithenticate.com/products/faqs
+2. Add relevant messages to help the bot skip reverted edits
+
+
+UI
+----------------------------
+The bot can either generate simple wiki report pages, or write to a database to be used by other tools.
+
+See also: https://github.com/wikimedia/CopyPatrol
 
 Useful links:
- * http://www.ithenticate.com/hs-fs/hub/92785/file-1383985272-pdf/iTh_documentation/iThenticate_API_Manual.pdf
-
-
-
-Reporting braindump notes:
 ----------------------------
-1. get diffs from the last day or so [on wikiproject medicine]
-2. run on each diff (somehow....) which added at least N words,  N~7
-3. make a daily report: a table, with columns 'plagiarism percentage', 'link to diff', 'link to details subpage'
-4. make details subpage (use e.g. diffid as name) with plagiarism percentage, link to diff and list of pages that was plagiarized from. Also link to the ithenticate details page maybe.
+* http://www.ithenticate.com/hs-fs/hub/92785/file-1383985272-pdf/iTh_documentation/iThenticate_API_Manual.pdf
+
+
 
