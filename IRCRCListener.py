@@ -91,6 +91,7 @@ def irc_rc_listener(site, filter_gen=None):
         nickname = site.username()
     else:
         nickname = 'Eranbot'
+    nickname += '%s%s'%(site.lang, site.family.name)
     irc_thread =  IRCRcBotThread(site, channel, nickname, server, filter_gen)
     irc_thread.start()
     restarts = 0
