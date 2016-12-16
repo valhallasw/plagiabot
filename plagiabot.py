@@ -1,5 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+from __future__ import unicode_literals
 """
 Script to catch copyright violations.
 The script use DB or API to get diffs, and sends inserts and replacements to an external service 
@@ -32,7 +33,6 @@ Report on possible violations in the last 3 days to console:
 Report on possible violations in the top 100 recent changes (no DB access required):
     python plagiabot.py -api_recentchanges:100
 """
-from __future__ import unicode_literals
 import time
 import datetime
 import difflib
@@ -79,15 +79,15 @@ messages = {
         'rollback_of_summary': 'Reverted .*?edits? by (\[\[User:)?{0}|Undid revision {1}|Reverting possible vandalism by (\[\[User:)?{0}'
     },
     'he': {
-        'table-title': u'כותרת',
-        'table-editor': u'עורך/עורכת',
-        'table-diff': u'הבדל',
-        'table-status': u'מצב',
-        'template-diff': u'הבדל',
-        'table-source': u'מקורות',
-        'update-summary': u'עדכון',
-        'ignore_summary': u'(שוחזר מעריכות של|ביטול גרסה|שחזור עריכות)',
-        'rollback_of_summary': u'שוחזר מעריכ(ה|ות) של (\[\[User:|\[\[משתמש:)?{0}|ביטול גרסה {1}'
+        'table-title': 'כותרת',
+        'table-editor': 'עורך/עורכת',
+        'table-diff': 'הבדל',
+        'table-status': 'מצב',
+        'template-diff': 'הבדל',
+        'table-source': 'מקורות',
+        'update-summary': 'עדכון',
+        'ignore_summary': '(שוחזר מעריכות של|ביטול גרסה|שחזור עריכות)',
+        'rollback_of_summary': 'שוחזר מעריכ(ה|ות) של (\[\[User:|\[\[משתמש:)?{0}|ביטול גרסה {1}'
    },
    'fr': {
         'table-title': 'Titre',
@@ -695,7 +695,7 @@ def db_changes_generator(site, talk_template=None, page_of_pages=None, days=1, n
 
     # Use the select for a set of pages to find changes to compose a query for changes to those pages
     ignore_summary = messages[site.lang]['ignore_summary'] if site.lang in messages else messages['en']['ignore_summary']
-    ignore_summary = ignore_summary.replace('\\','\\\\').encode('utf8')
+    ignore_summary = ignore_summary.replace('\\','\\\\')#.encode('utf8')
     query = '''
 /* plagiabot */
         select max(rc_this_oldid), min(rc_last_oldid), rc_title, max(rc_new_len-rc_old_len) as diffSize
