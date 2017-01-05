@@ -720,8 +720,11 @@ def parse_blacklist(page_name):
     """
     Backlist format: # to end is comment. every line is regex.
     """
-    page = pywikibot.Page(pywikibot.Site(), page_name)
-    blackList=page.get()
+    page = pywikibot.Page(pywikibot.Site('meta', 'meta'), page_name)
+    try:
+        blackList=page.get()
+    except pywikibot.exceptions.NoPage:
+        raise Exception('The blacklist page named "%s" could not be found on metawiki.' % page_name)
     blacklist_sites = [re.sub('(#|==).*$', '', line).strip() for line in blackList.splitlines()[1:]]
     blacklist_sites = filter(lambda line: len(line)>0, blacklist_sites)
     reblacklist = []
