@@ -86,8 +86,8 @@ messages = {
         'template-diff': 'הבדל',
         'table-source': 'מקורות',
         'update-summary': 'עדכון',
-        'ignore_summary': '(שוחזר מעריכות של|ביטול גרסה|שחזור עריכות)',
-        'rollback_of_summary': 'שוחזר מעריכ(ה|ות) של (\[\[User:|\[\[משתמש:)?{0}|ביטול גרסה {1}'
+        'ignore_summary': '(שוחזר מעריכות של|ביטול גרסה|שחזור עריכות|שחזור לגרסה)',
+        'rollback_of_summary': 'שוחזר מעריכ(ה|ות) של (\[\[User:|\[\[משתמש:)?{0}|(ביטול|שחזור) גרסה {1}'
    },
    'fr': {
         'table-title': 'Titre',
