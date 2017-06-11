@@ -194,7 +194,7 @@ class PlagiaBot(object):
         for rev_details, upload_id, added_lines in self.uploads[::-1]:
             document_get_response = self.server.document.get({'id': upload_id, 'sid': self.sid})
             if (document_get_response['status'] != 200):
-                raise Exception('Error retreving document {}'.format(upload_id))
+                raise Exception('Error retreving document {}. Response status: {}'.format(upload_id, document_get_response['status']))
             document = document_get_response['documents'][0]
             pending = document['is_pending']
             if pending:
@@ -210,7 +210,12 @@ class PlagiaBot(object):
         pywikibot.output("Polling iThenticate until document has been processed...", newline=False)
 
         while True:
-            document_get_response = self.server.document.get({'id': upload_id, 'sid': self.sid})
+            try:
+                document_get_response = self.server.document.get({'id': upload_id, 'sid': self.sid})
+            except xmlrpclib.ProtocolError as e:
+                # silently drop this entry
+                pywikibot.output('Err ' + e.message)
+                return '', 0 
             assert (document_get_response['status'] == 200)
             document = document_get_response['documents'][0]
             pending = document['is_pending']
