@@ -549,7 +549,7 @@ class PlagiaBot(object):
         self.report_uploads()
 
 class PlagiaBotLive(PlagiaBot):
-    def __init__(self, site, report_page=None, use_stream=False, report_log=report_logger.ReportLogger(), run_timeout = 14400):
+    def __init__(self, site, report_page=None, use_stream=True, report_log=report_logger.ReportLogger(), run_timeout = 14400):
         super(PlagiaBotLive, self).__init__(site, [], report_page, report_log)
         self.rcthreshold = 10
         self.use_stream = use_stream
@@ -560,7 +560,7 @@ class PlagiaBotLive(PlagiaBot):
     def page_filter(self, page):
         global wikiEd_pages
         rcinfo = page._rcinfo
-        if rcinfo['type'] != 'edit': return False  # only edits
+        if rcinfo['type'] != 'edit' and rcinfo['type'] != 'new': return False  # only edits and new pages
         if rcinfo['bot']: return False # skip bot edits
         if (rcinfo['namespace'] not in [0, 118]) and page.title() not in wikiEd_pages: return False  # only articles+drafts
         if 'length' in rcinfo:
@@ -577,7 +577,7 @@ class PlagiaBotLive(PlagiaBot):
         global MIN_SIZE
         self.generator = []
         log('Starting live bot')
-        filter_gen = lambda gen: [p for p in gen if self.page_filter(p)]
+        filter_gen = lambda gen: (p for p in gen if self.page_filter(p))
         if self.use_stream:
             live_gen = pagegenerators.LiveRCPageGenerator(self.site)
             live_gen = filter_gen(live_gen)
