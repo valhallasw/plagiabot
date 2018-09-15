@@ -784,6 +784,7 @@ def main(*args):
     live_check = False
     genFactory = pagegenerators.GeneratorFactory()
     report_log = report_logger.ReportLogger()
+    page_triage = False
     for arg in pywikibot.handle_args(args):
         site = pywikibot.Site()
         if arg.startswith('-talkTemplate:'):
@@ -809,6 +810,9 @@ def main(*args):
         elif arg.startswith('-reportlogger'):
             report_log = report_logger.DbReportLogger(pywikibot.Site())
             print('using report logger')
+        elif arg.startswith('-pagetriagetag'):
+            page_triage = True
+            print('using pagetriage')
         elif arg.startswith('-blacklist:'):
             ignore_sites = parse_blacklist(arg[len("-blacklist:"):])
         elif genFactory.handleArg(arg):
@@ -824,6 +828,7 @@ def main(*args):
     if generator is None and not live_check:
         pywikibot.showHelp()
     else:
+        report_log.page_triage = page_triage
         if live_check:
             log('running live')
             bot = PlagiaBotLive(pywikibot.Site(), report_page , report_log=report_log)
