@@ -1,22 +1,23 @@
 # -*- coding: utf-8 -*-
 from pywikibot.data.api import APIError
+import pywikibot
+from pywikibot import config
+import dbsettings
 
 _qmark = '?'
 try:
     import oursql as MySQLdb
 except:
     import MySQLdb
-    _qmark = '%s'
 
-import pywikibot
-from pywikibot import config
-import dbsettings
+    _qmark = '%s'
 
 
 class ReportLogger(object):
     """
     Base class for report logger
     """
+
     def __init__(self, site=None):
         self.site = site
         self._page_triage = False
@@ -38,8 +39,7 @@ class ReportLogger(object):
             response = request.submit()
         except APIError as e:
             # silently drop it
-            pywikibot.output('Triage triage {}: {}'.format(diff,e.message))
-
+            pywikibot.output('Triage triage {}: {}'.format(diff, str(e)))
 
     @property
     def page_triage(self):
@@ -56,6 +56,7 @@ class DbReportLogger(ReportLogger):
     """
     Db report logger logs reports to database
     """
+
     def __init__(self, site=None):
         super(DbReportLogger, self).__init__(site)
         self.conn = None
@@ -66,10 +67,10 @@ class DbReportLogger(ReportLogger):
 
     def connect(self):
         self.conn = MySQLdb.connect(host=dbsettings.reporter_db_host,
-                           db='{}__copyright_p'.format(config.db_username),
-                           read_default_file=config.db_connect_file)
+                                    db='{}__copyright_p'.format(config.db_username),
+                                    read_default_file=config.db_connect_file)
         self.cursor = self.conn.cursor()
- 
+
     def add_report(self, diff, diff_ts, page_title, page_ns, ithenticate_id, report):
         global _qmark
         super(DbReportLogger, self).add_report(diff, diff_ts, page_title, page_ns, ithenticate_id, report)
@@ -77,12 +78,14 @@ class DbReportLogger(ReportLogger):
             self.connect()  # TODO: handle InterfaceError: Can't connect to MySQL server...?
         diff_ts = diff_ts.totimestampformat()  # use MW format
         retries = 0
-        while retries < 2: 
+        while retries < 2:
             try:
                 insert_query = """INSERT INTO copyright_diffs (project, lang, diff, diff_timestamp, page_title, page_ns, ithenticate_id, report)
                 values ({}, {}, {}, {}, {}, {}, {}, {} )
-                """.format(*[_qmark]*8)
-                self.cursor.execute(insert_query, (self.project, self.lang, diff, diff_ts, page_title.replace(' ','_'), int(page_ns), ithenticate_id, report))
+                """.format(*[_qmark] * 8)
+                self.cursor.execute(insert_query, (
+                    self.project, self.lang, diff, diff_ts, page_title.replace(' ', '_'), int(page_ns), ithenticate_id,
+                    report))
                 self.conn.commit()
                 break
             except MySQLdb.OperationalError:
