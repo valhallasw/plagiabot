@@ -47,6 +47,8 @@ class ReportLogger(object):
 
     @page_triage.setter
     def page_triage(self, val):
+        if not self.site:
+            self.site = pywikibot.Site()
         if val and not self.site.has_group('copyviobot'):
             raise Exception('Invalid user rights. user must belong to copyviobot group')
         self._page_triage = val
