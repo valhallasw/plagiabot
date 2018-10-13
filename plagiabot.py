@@ -47,7 +47,10 @@ try:
 except:
     import xmlrpclib
 import requests
-import urllib
+try:
+    from urllib import quote as urllib_quote
+except ImportError:
+    from urllib.parse import quote as urllib_quote  # python3 compatibility
 
 import pywikibot
 from pywikibot import pagegenerators, config
@@ -214,7 +217,7 @@ class PlagiaBot(object):
                 document_get_response = self.server.document.get({'id': upload_id, 'sid': self.sid})
             except xmlrpclib.ProtocolError as e:
                 # silently drop this entry
-                pywikibot.output('Err ' + e.message)
+                pywikibot.output('Err ' + str(e))
                 return '', 0 
             assert (document_get_response['status'] == 200)
             document = document_get_response['documents'][0]
@@ -239,7 +242,7 @@ class PlagiaBot(object):
                 assert (report_sources_response['status'] == 200)
             except Exception as e:
                 # silently drop this entry
-                pywikibot.output('Err ' + e.message)
+                pywikibot.output('Err ' + str(e))
                 return '', 0
 
             report = []
@@ -250,7 +253,9 @@ class PlagiaBot(object):
             for source in sources:
                 pywikibot.output(source['linkurl'])
                 if int(source['percent']) < MIN_PERCENTAGE:
-                    # pywikibot.output('Not enough similarity '+ str(source['percent']))
+                    pywikibot.output('Not enough similarity ({}%; Words: {})'.format(source['percent'],
+                                                                                     source['word_count']
+                                                                                     ))
                     continue
                 
                 hint_text = ''
@@ -260,7 +265,7 @@ class PlagiaBot(object):
                     else:
                         req_source = requests.get(source['linkurl'])
                         if req_source.status_code == 200:
-                            title_encode = urllib.quote(article_title)
+                            title_encode = urllib_quote(article_title)
                             mirror_re = re.compile('(wikipedia.org/w(iki/|/index.php\?title=)(%s|%s)|material from the Wikipedia article|From Wikipedia|source: wikipedia)' % (
                                 re.sub('[ _]', '[ _]', re.escape(article_title)), title_encode), re.I)
                             if any(mirror_re.findall(req_source.text)):
@@ -287,7 +292,7 @@ class PlagiaBot(object):
                     pywikibot.output('Connection error to site')
                     continue  # we trust it enough by now to just skip those results
                 except Exception as e:
-                    pywikibot.output('Err ' + e.message)
+                    pywikibot.output('Err ' + str(e))
                     num_sources += 1
                     pass
                 compare_link = '//tools.wmflabs.org/copyvios?lang={{subst:CONTENTLANG}}&project={{lc:{{ns:Project}}}}&title=&oldid='+str(rev_id)+'&action=compare&url='+source['linkurl']
@@ -412,7 +417,7 @@ class PlagiaBot(object):
                 if ignore_regex.match(comment):
                     continue
             except Exception as e:
-                pywikibot.output("Error occurred - skipping: %s" % e.message)
+                pywikibot.output("Error occurred - skipping: %s" % str(e))
                 continue
 
             diffy = difflib.SequenceMatcher()
@@ -445,14 +450,14 @@ class PlagiaBot(object):
             added_lines = self.remove_moved_content(p, prev_rev, added_lines, comment) 
 
             added_lines = u'. '.join([new_t for new_t in added_lines.split(u'. ') if new_t not in old]) # remove text appeared in original
-            #remove quotation (for small quotes)
+            # remove quotation (for small quotes)
             quotes = re.findall('".*?"[ ,\.;:<\{]', added_lines)
             for quote in quotes:
                 if quote.count(' ') < WORDS_QUOTE:
                     added_lines = added_lines.replace(quote, '')
 
             if len(added_lines) > MIN_SIZE and (prev_rev==0 or not self.was_rolledback(p, new_rev, added_lines) and len(re.split('\s', added_lines)) > 20):
-                if DEBUG_MODE: # dont upload to server in debug mode
+                if DEBUG_MODE:  # dont upload to server in debug mode
                     continue
                 try:
                     upload_id = self.upload_diff(added_lines.encode('utf8'), p.title(), "/%i" % new_rev)
@@ -485,7 +490,8 @@ class PlagiaBot(object):
 }}}}
 == ==
 """
-        reports_details = [dict(details[0].items() + source.items()) for details, source in zip(self.uploads, reports_source)
+        reports_details = [dict(list(details[0].items()) + list(source.items()))
+                           for details, source in zip(self.uploads, reports_source)
                            if len(source['source']) > 0]
         # add tags by associated wikiprojects
         for report in reports_details:
@@ -532,7 +538,7 @@ class PlagiaBot(object):
                 self.report_page.put(reports, "Update")
             except pywikibot.SpamfilterError:
                 pywikibot.output('spam filter error')
-            except PageSaveRelatedError:
+            except pywikibot.PageSaveRelatedError:
                 pywikibot.output('page save related error')
             except pywikibot.EditConflict:
                 try_save = True
