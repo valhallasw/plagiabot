@@ -571,7 +571,7 @@ class PlagiaBotLive(PlagiaBot):
         if (rcinfo['namespace'] not in [0, 118]) and page.title() not in wikiEd_pages: return False  # only articles+drafts
         if 'length' in rcinfo:
             new_size = rcinfo['length']['new']
-            old_size = rcinfo['length']['old'] or 0
+            old_size = rcinfo['length'].get('old', 0)
             diff_size = new_size - old_size
         else:
             diff_size = rcinfo['diff_bytes']
@@ -598,7 +598,7 @@ class PlagiaBotLive(PlagiaBot):
                 #log('Adding page:' + page.title())
                 # TODO: remove rolledback edits from generator
                 pywikibot.output('Page in buffer: {}'.format(len(pending_checks)))
-                pending_checks.append((page, rcinfo['revision']['new'], rcinfo['revision']['old'] or 0))
+                pending_checks.append((page, rcinfo['revision']['new'], rcinfo['revision'].get('old', 0)))
                 if self.end_time < datetime.datetime.now():
                     raise KeyboardInterrupt
                 if len(pending_checks) < self.rcthreshold or not self.uploads_ready(): continue # move to next edit if not enough edits accomulated
