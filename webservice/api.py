@@ -37,9 +37,12 @@ class json_formatter(object):
         return '[]' if self.is_first else ']'
 
 def suspected_diffs(q):
-    import oursql 
+    try:
+        import MySQLdb as sql
+    except:
+        import pymysql as sql
     import dbsettings
-    con = oursql.connect(host=dbsettings.reporter_db_host, db='{}__copyright_p'.format(dbsettings.db_username),
+    con = sql.connect(host=dbsettings.reporter_db_host, db='{}__copyright_p'.format(dbsettings.db_username),
                           read_default_file=dbsettings.connect_file, use_unicode=True, charset='utf8')
     cursor = con.cursor()
     columns = ['project','lang','diff', 'diff_timestamp','page_title','page_ns', 'ithenticate_id']
