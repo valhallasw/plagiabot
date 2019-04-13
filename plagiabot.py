@@ -719,11 +719,14 @@ def db_changes_generator(site, talk_template=None, page_of_pages=None, days=1, n
                 rc_user=ug_user and
                 rc_type < 5 and
                 ug_group = 'bot'
+            left outer join comment
+            on
+                rc_comment_id = comment_id
             where ug_group is NULL and
                 rc_namespace=%s and
                 rc_timestamp > %s and
 /*                rc_new_len-rc_old_len>500 and*/
-                rc_comment not rlike '%s'
+                comment_text not rlike '%s'
             /*order by  rc_new_len-rc_old_len desc*/
         group by rc_title
         having max(rc_new_len-rc_old_len)>500
