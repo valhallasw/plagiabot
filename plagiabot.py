@@ -212,6 +212,8 @@ class PlagiaBot(object):
         global MIN_PERCENTAGE, DIFF_URL
         pywikibot.output("Polling iThenticate until document has been processed...", newline=False)
 
+        retries = 0
+        retry_wait = pywikibot.config.retry_wait
         while True:
             try:
                 document_get_response = self.server.document.get({'id': upload_id, 'sid': self.sid})
@@ -224,8 +226,13 @@ class PlagiaBot(object):
             pending = document['is_pending']
             if not pending:
                 break
+            if retry_wait > pywikibot.config.retry_max or retries == pywikibot.config.max_retries:
+                pywikibot.error('iThenticate pending after {} retries. Skipping.'.format(retries))
+                return '', 0
             pywikibot.output('.', newline=False)
-            time.sleep(5)
+            pywikibot.sleep(retry_wait)
+            retries += 1
+            retry_wait += pywikibot.config.retry_wait
         pywikibot.output('.')
         if 'parts' not in document:
             pywikibot.output('Error getting parts of document. Rev id: ' + str(rev_id))
