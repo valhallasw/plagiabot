@@ -201,7 +201,7 @@ class PlagiaBot(object):
             document = document_get_response['documents'][0]
             pending = document['is_pending']
             if pending:
-                pywikibot.output('Waiting')
+                pywikibot.output('Waiting for upload id {} for {} rev {}'.format(upload_id, rev_details['title'], rev_details['new']))
                 self.last_uploads_status = time.time()
                 return False
         pywikibot.output('ready')
@@ -387,7 +387,9 @@ class PlagiaBot(object):
         for pos_article in possible_articles:
             pos_page = pywikibot.Page(self.site, pos_article)
             try:
-                self.site.loadrevisions(pos_page, startid=prev_rev, getText=True, total=2)
+                # self.site.loadrevisions(pos_page, startid=prev_rev, getText=True, total=2)
+                self.site.loadrevisions(pos_page, getText=True, total=2)
+
                 for rev in pos_page._revisions:
                     old_content = self.remove_wikitext(pos_page.getOldVersion(rev))
                     content = u'\n'.join([line for line in content.split(u'\n') if line not in old_content])
