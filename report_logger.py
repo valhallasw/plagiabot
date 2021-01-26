@@ -70,7 +70,9 @@ class DbReportLogger(ReportLogger):
     def connect(self):
         self.conn = MySQLdb.connect(host=dbsettings.reporter_db_host,
                                     db='{}__copyright_p'.format(config.db_username),
-                                    read_default_file=config.db_connect_file)
+                                    read_default_file=config.db_connect_file,
+                                    use_unicode=True,
+                                    charset="utf8")
         self.cursor = self.conn.cursor()
 
     def add_report(self, diff, diff_ts, page_title, page_ns, ithenticate_id, report):
