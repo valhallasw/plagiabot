@@ -426,7 +426,10 @@ class PlagiaBot(object):
                 if ignore_regex.match(comment):
                     continue
             except Exception as e:
-                pywikibot.output("Error occurred - skipping: %s" % str(e))
+                try:
+                    pywikibot.output("Error occurred - skipping: %s" % str(e))
+                except UnicodeDecodeError:
+                    pywikibot.output("Error occurred - skipping: Unknown [cannot decode]")
                 continue
 
             diffy = difflib.SequenceMatcher()
